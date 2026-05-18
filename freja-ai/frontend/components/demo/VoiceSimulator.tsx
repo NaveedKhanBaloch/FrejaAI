@@ -51,6 +51,9 @@ export function VoiceSimulator() {
     setConnecting(true);
     reset();
     try {
+      if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+        throw new Error("Microphone access requires HTTPS. Open the site with https:// and allow microphone permission.");
+      }
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
       const wsBase = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8000";
