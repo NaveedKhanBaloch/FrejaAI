@@ -1,0 +1,19 @@
+[project]
+name = "freja-ai-backend"
+version = "0.1.0"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["sqlalchemy.ext.mypy.plugin"]
+exclude = ["alembic/"]
+
+[tool.ruff]
+line-length = 140
+target-version = "py312"
