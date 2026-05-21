@@ -36,12 +36,14 @@ function isLocalBrowserOrigin() {
 
 export function VoiceSimulator() {
   const { lines, reset, addLine, completeOrder } = useVoiceStore();
+  const ticketReady = useVoiceStore((state) => state.ticketReady);
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState("Ready");
   const transcriptRef = useRef<HTMLDivElement | null>(null);
   const connectTimerRef = useRef<number | null>(null);
+  const clientOrderIdRef = useRef<string | null>(null);
   const lastMessageRef = useRef<{ role: "user" | "agent"; text: string; at: number } | null>(null);
 
   const getMenu = useCallback(async () => {
@@ -50,12 +52,16 @@ export function VoiceSimulator() {
   }, []);
 
   const validateItem = useCallback(async (parameters: Record<string, unknown>) => {
+    const modifiers: Record<string, unknown> = typeof parameters.modifiers === "object" && parameters.modifiers !== null ? { ...parameters.modifiers } : {};
+    const size = parameters.size ?? parameters.Size ?? parameters.item_size ?? parameters.itemSize;
+    if (typeof size === "string" && size.trim()) modifiers.size = size;
     const result = await api<ToolResult>("/elevenlabs/tools/validate-item", {
       method: "POST",
       body: JSON.stringify({
-        item_name: String(parameters.item_name ?? parameters.name ?? ""),
+        item_name: String(parameters.item_name ?? parameters.itemName ?? parameters.name ?? ""),
         quantity: Number(parameters.quantity ?? 1),
-        modifiers: typeof parameters.modifiers === "object" && parameters.modifiers !== null ? parameters.modifiers : {},
+        size: typeof size === "string" ? size : undefined,
+        modifiers,
       }),
     });
     return stringifyToolResult(result);
@@ -63,9 +69,11 @@ export function VoiceSimulator() {
 
   const confirmOrder = useCallback(
     async (parameters: Record<string, unknown>) => {
+      const order = typeof parameters.order === "object" && parameters.order !== null ? { ...parameters.order } as Record<string, unknown> : { ...parameters };
+      order.clientOrderId = clientOrderIdRef.current ?? `freja-demo-${Date.now()}`;
       const result = await api<ToolResult>("/elevenlabs/tools/confirm-order", {
         method: "POST",
-        body: JSON.stringify({ order: parameters.order ?? parameters }),
+        body: JSON.stringify({ order }),
       });
       if (result.ticket) completeOrder(result.ticket);
       return stringifyToolResult(result);
@@ -140,6 +148,7 @@ export function VoiceSimulator() {
     setStatusMessage("Starting ElevenLabs session...");
     reset();
     try {
+      clientOrderIdRef.current = `voice-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
       if (!window.isSecureContext && !isLocalBrowserOrigin()) {
         throw new Error(`Microphone access requires HTTPS. Current origin is ${window.location.origin}. Open http://localhost:3000 or https://freja.plenware.cloud.`);
       }
@@ -180,6 +189,15 @@ export function VoiceSimulator() {
 
   const connected = conversation.status === "connected";
   const active = connecting || connected || conversation.isSpeaking || conversation.isListening;
+
+  useEffect(() => {
+    if (!ticketReady || conversation.status !== "connected") return;
+    const timer = window.setTimeout(() => {
+      conversation.endSession();
+      setStatusMessage("Order confirmed. Call ended.");
+    }, 3500);
+    return () => window.clearTimeout(timer);
+  }, [conversation, ticketReady]);
 
   return (
     <div className="mx-auto w-full max-w-[375px] border border-border bg-surface p-4">

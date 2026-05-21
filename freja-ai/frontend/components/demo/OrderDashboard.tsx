@@ -87,7 +87,7 @@ export function OrderDashboard() {
 }
 
 function Overview() {
-  const { data, isLoading, isError, error } = useQuery({ queryKey: ["dashboard-overview"], queryFn: () => api<OverviewResponse>("/dashboard/overview"), retry: 1 });
+  const { data, isLoading, isError, error } = useQuery({ queryKey: ["dashboard-overview"], queryFn: () => api<OverviewResponse>("/dashboard/overview"), retry: 1, refetchInterval: 5000 });
   const metrics = data?.metrics;
   return (
     <div className="grid gap-5">
@@ -123,7 +123,7 @@ function Overview() {
 
 function LiveOrders() {
   const queryClient = useQueryClient();
-  const { data: rows = [], isLoading, isError, error } = useQuery({ queryKey: ["dashboard-orders"], queryFn: () => api<DashboardOrder[]>("/dashboard/orders"), retry: 1 });
+  const { data: rows = [], isLoading, isError, error } = useQuery({ queryKey: ["dashboard-orders"], queryFn: () => api<DashboardOrder[]>("/dashboard/orders"), retry: 1, refetchInterval: 5000 });
   const statusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: DashboardOrderStatus }) =>
       api<DashboardOrder>(`/dashboard/orders/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) }),

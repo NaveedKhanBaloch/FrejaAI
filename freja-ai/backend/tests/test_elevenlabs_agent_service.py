@@ -50,6 +50,13 @@ def test_order_type_resolution_uses_known_conversation_values() -> None:
     assert service._resolve_order_type({"items": [{"name": "Vesuvio"}]}) == "pickup"
 
 
+def test_order_idempotency_prefers_explicit_call_key() -> None:
+    service = ElevenLabsAgentService()
+
+    assert service._order_idempotency_key({"clientOrderId": "abc-123"}) == "elevenlabs-abc-123"
+    assert service._order_idempotency_key({"conversation_id": "conv-42"}) == "elevenlabs-conv-42"
+
+
 @pytest.mark.asyncio
 async def test_validate_item_uses_requested_size_price(monkeypatch: pytest.MonkeyPatch) -> None:
     service = ElevenLabsAgentService()

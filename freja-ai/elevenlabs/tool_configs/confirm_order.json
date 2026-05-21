@@ -72,6 +72,10 @@
                                 "delivery"
                             ],
                             "description": "Required. Use the pickup/delivery answer the customer already gave earlier. Never ask again just to fill this field."
+                        },
+                        "clientOrderId": {
+                            "type": "string",
+                            "description": "Optional idempotency key for this voice call/order. Use the same value if confirm_order is retried."
                         }
                     }
                 }

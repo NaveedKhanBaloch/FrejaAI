@@ -1,6 +1,7 @@
 import json
 import re
 from datetime import datetime, timezone
+from hashlib import sha256
 from typing import Any
 
 import httpx
@@ -161,6 +162,17 @@ class ElevenLabsAgentService:
         if not isinstance(items, list) or not items:
             raise MenuValidationError("Order must include at least one item")
 
+        idempotency_key = self._order_idempotency_key(order)
+        existing_order = await self._find_existing_order(session, restaurant.id, idempotency_key)
+        if existing_order is not None:
+            return {
+                "confirmed": True,
+                "duplicate": True,
+                "ticket": self._order_ticket(existing_order, normalized_type, address),
+                "message": f"Order already confirmed. Total {self._format_kr(existing_order.total_amount)}.",
+                "end_call": True,
+            }
+
         saved_items: list[dict[str, Any]] = []
         ticket_items: list[dict[str, Any]] = []
         total_amount = 0
@@ -194,7 +206,7 @@ class ElevenLabsAgentService:
 
         call_log = CallLog(
             restaurant_id=restaurant.id,
-            call_uuid=f"elevenlabs-{datetime.now(timezone.utc).timestamp()}",
+            call_uuid=idempotency_key,
             customer_phone=str(order.get("customer_phone") or "unknown"),
             duration_seconds=int(order.get("duration_seconds") or 0),
             transcript=str(order.get("transcript") or "Order confirmed by ElevenLabs voice agent."),
@@ -221,20 +233,75 @@ class ElevenLabsAgentService:
         await session.commit()
         await session.refresh(saved_order)
 
-        ticket = {
-            "id": f"#{str(saved_order.id)[:4].upper()}",
-            "order_id": str(saved_order.id),
-            "type": normalized_type.upper(),
-            "items": ticket_items,
-            "address": str(address) if normalized_type == "delivery" else None,
-            "eta": "25-35 min" if normalized_type == "delivery" else "15-20 min",
-            "total": self._format_kr(total_amount),
-        }
+        ticket = self._order_ticket(saved_order, normalized_type, address, ticket_items)
         return {
             "confirmed": True,
             "ticket": ticket,
             "message": f"Order confirmed. Total {ticket['total']}.",
+            "end_call": True,
         }
+
+    async def _find_existing_order(self, session: AsyncSession, restaurant_id: Any, idempotency_key: str) -> Order | None:
+        result = await session.execute(
+            select(Order)
+            .join(CallLog, Order.call_log_id == CallLog.id)
+            .where(Order.restaurant_id == restaurant_id, CallLog.call_uuid == idempotency_key)
+            .order_by(Order.created_at.desc())
+        )
+        return result.scalars().first()
+
+    def _order_ticket(
+        self,
+        order: Order,
+        normalized_type: str,
+        address: Any,
+        items: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        return {
+            "id": f"#{str(order.id)[:4].upper()}",
+            "order_id": str(order.id),
+            "type": normalized_type.upper(),
+            "items": items or self._ticket_items_from_saved_order(order.items),
+            "address": str(address) if normalized_type == "delivery" else None,
+            "eta": "25-35 min" if normalized_type == "delivery" else "15-20 min",
+            "total": self._format_kr(order.total_amount),
+        }
+
+    def _ticket_items_from_saved_order(self, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return [
+            {
+                "name": item.get("name"),
+                "quantity": item.get("quantity"),
+                "unit_price_label": item.get("unit_price_label"),
+                "total_price_label": item.get("total_price_label"),
+                "modifiers": item.get("modifiers") if isinstance(item.get("modifiers"), dict) else {},
+                "allergens": item.get("allergens") if isinstance(item.get("allergens"), list) else [],
+            }
+            for item in items
+            if isinstance(item, dict)
+        ]
+
+    def _order_idempotency_key(self, order: dict[str, Any]) -> str:
+        explicit = (
+            order.get("idempotency_key")
+            or order.get("idempotencyKey")
+            or order.get("client_order_id")
+            or order.get("clientOrderId")
+            or order.get("conversation_id")
+            or order.get("conversationId")
+            or order.get("call_uuid")
+            or order.get("callUuid")
+        )
+        if isinstance(explicit, str) and explicit.strip():
+            return f"elevenlabs-{explicit.strip()[:100]}"
+        fingerprint_payload = {
+            "order_type": self._resolve_order_type(order),
+            "customer": order.get("customer_name") or order.get("customerName") or order.get("customer_phone") or order.get("customerPhone") or "unknown",
+            "items": order.get("items") or [],
+            "time_bucket": int(datetime.now(timezone.utc).timestamp() // 300),
+        }
+        digest = sha256(json.dumps(fingerprint_payload, sort_keys=True, ensure_ascii=False, default=str).encode()).hexdigest()[:32]
+        return f"elevenlabs-fingerprint-{digest}"
 
     def _serialize_menu_item(self, item: dict[str, Any]) -> dict[str, Any]:
         modifiers = dict(item.get("modifiers") or {})
