@@ -2,6 +2,7 @@ from uuid import uuid4
 
 import pytest
 
+from app.ai.order_builder import MenuValidationError
 from app.services.elevenlabs_agent_service import ElevenLabsAgentService
 
 
@@ -73,3 +74,22 @@ async def test_validate_item_uses_requested_size_price(monkeypatch: pytest.Monke
     assert standard["item"]["selected_size"] == "standard"
     assert family["item"]["unit_price_label"] == "kr 405"
     assert family["item"]["selected_size"] == "familj"
+
+
+@pytest.mark.asyncio
+async def test_confirm_order_requires_customer_name_and_phone(monkeypatch: pytest.MonkeyPatch) -> None:
+    service = ElevenLabsAgentService()
+
+    class RestaurantStub:
+        id = uuid4()
+
+    async def fake_restaurant(_session: object) -> RestaurantStub:
+        return RestaurantStub()
+
+    monkeypatch.setattr(service, "get_restaurant", fake_restaurant)
+
+    with pytest.raises(MenuValidationError, match="Customer name is required"):
+        await service.confirm_order(object(), {"items": [{"name": "Kebabpizza"}], "orderType": "pickup"})  # type: ignore[arg-type]
+
+    with pytest.raises(MenuValidationError, match="Customer phone number is required"):
+        await service.confirm_order(object(), {"items": [{"name": "Kebabpizza"}], "orderType": "pickup", "customerName": "Naveed"})  # type: ignore[arg-type]

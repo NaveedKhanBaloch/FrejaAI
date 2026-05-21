@@ -82,7 +82,7 @@ async def get_signed_url(session: AsyncSession = Depends(get_session)) -> Signed
         agent_id=service.agent_id(),
         auth_mode="signed_url",
         prompt=await service.demo_prompt(session),
-        first_message=f"Hej! Välkommen till {get_settings().demo_restaurant_name}. Vill du beställa för avhämtning eller leverans?",
+        first_message=f"Hej, det här är Freja från {get_settings().demo_restaurant_name}. Vad vill du beställa idag?",
         voice_id=get_settings().demo_elevenlabs_voice_id,
         restaurant_name=get_settings().demo_restaurant_name,
     )

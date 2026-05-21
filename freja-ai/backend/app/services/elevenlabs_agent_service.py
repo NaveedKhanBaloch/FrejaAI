@@ -88,9 +88,10 @@ class ElevenLabsAgentService:
             + "Call get_menu before listing available menu items if you are unsure.\n"
             + "Call validate_item before confirming an item or modifier.\n"
             + "After the customer finishes choosing items, ask pickup or delivery if it is not already known.\n"
+            + "If the customer says no, nothing else, or that is enough after you ask about more items, treat that only as cart complete. It is not final order confirmation.\n"
             + "After order type is known, collect customer name and phone number for every order, including pickup.\n"
             + "Read back the full order and total, then ask for final confirmation once.\n"
-            + "Call confirm_order only after the customer clearly approves the final summary.\n"
+            + "Call confirm_order only after the customer clearly approves the final summary after name, phone, and pickup/delivery are known.\n"
             + "Treat pickup/delivery as a locked order_type once the customer answers. Do not ask it again unless the answer was unclear.\n"
             + "When speaking prices aloud, say kronor instead of the abbreviation kr.\n"
             + "When confirm_order succeeds, say one short closing sentence, then immediately call end_call. Do not ask more questions.\n"
@@ -161,6 +162,12 @@ class ElevenLabsAgentService:
         items = order.get("items")
         if not isinstance(items, list) or not items:
             raise MenuValidationError("Order must include at least one item")
+        customer_name = self._resolve_customer_name(order)
+        customer_phone = self._resolve_customer_phone(order)
+        if customer_name is None:
+            raise MenuValidationError("Customer name is required before confirming the order")
+        if customer_phone == "not_provided":
+            raise MenuValidationError("Customer phone number is required before confirming the order")
 
         idempotency_key = self._order_idempotency_key(order)
         existing_order = await self._find_existing_order(session, restaurant.id, idempotency_key)
@@ -207,7 +214,7 @@ class ElevenLabsAgentService:
         call_log = CallLog(
             restaurant_id=restaurant.id,
             call_uuid=idempotency_key,
-            customer_phone=self._resolve_customer_phone(order),
+            customer_phone=customer_phone,
             duration_seconds=int(order.get("duration_seconds") or 0),
             transcript=str(order.get("transcript") or "Order confirmed by ElevenLabs voice agent."),
             recording_url=order.get("recording_url") if isinstance(order.get("recording_url"), str) else None,
@@ -221,8 +228,8 @@ class ElevenLabsAgentService:
         saved_order = Order(
             restaurant_id=restaurant.id,
             call_log_id=call_log.id,
-            customer_name=self._resolve_customer_name(order),
-            customer_phone=self._resolve_customer_phone(order),
+            customer_name=customer_name,
+            customer_phone=customer_phone,
             items=saved_items,
             total_amount=total_amount,
             order_type=normalized_type,
