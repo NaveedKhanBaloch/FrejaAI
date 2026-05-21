@@ -29,6 +29,7 @@ class SignedUrlResponse(BaseModel):
 class ValidateItemRequest(BaseModel):
     item_name: str = Field(validation_alias=AliasChoices("item_name", "itemName"), min_length=1)
     quantity: int = Field(default=1, ge=1)
+    size: str | None = Field(default=None)
     modifiers: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -97,7 +98,10 @@ async def get_menu(x_freja_tool_secret: str | None = Header(default=None), sessi
 async def validate_item(payload: ValidateItemRequest, x_freja_tool_secret: str | None = Header(default=None), session: AsyncSession = Depends(get_session)) -> dict[str, Any]:
     _verify_tool_secret(x_freja_tool_secret)
     try:
-        return await ElevenLabsAgentService().validate_item(session, payload.item_name, payload.quantity, payload.modifiers)
+        modifiers = dict(payload.modifiers)
+        if payload.size:
+            modifiers["size"] = payload.size
+        return await ElevenLabsAgentService().validate_item(session, payload.item_name, payload.quantity, modifiers)
     except MenuValidationError as exc:
         return {"valid": False, "message": str(exc)}
 

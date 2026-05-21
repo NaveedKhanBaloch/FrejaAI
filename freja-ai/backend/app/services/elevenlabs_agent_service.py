@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import datetime, timezone
 from typing import Any
 
@@ -16,6 +17,13 @@ from app.models.order import Order
 from app.models.restaurant import Restaurant
 from app.services.demo_menu import DEMO_MENU
 from app.services.restaurant_seed import ensure_demo_restaurant
+
+
+SIZE_ALIASES: dict[str, tuple[str, ...]] = {
+    "standard": ("standard", "normal", "vanlig", "medium", "mellan"),
+    "familj": ("familj", "family", "familjepizza", "family size"),
+    "large": ("large", "stor"),
+}
 
 
 class ElevenLabsAgentService:
@@ -128,6 +136,7 @@ class ElevenLabsAgentService:
                 "quantity": item.quantity,
                 "unit_price_label": self._format_kr(item.unit_price),
                 "total_price_label": self._format_kr(item.total_price),
+                "selected_size": item.modifiers.get("size") if item.modifiers else None,
                 "modifiers": item.modifiers,
                 "allergens": item.allergens,
             },
@@ -230,6 +239,7 @@ class ElevenLabsAgentService:
             str(size): self._format_kr(int(item["base_price"]) + int(delta))
             for size, delta in sizes.items()
         }
+        available_sizes = self._available_sizes(item)
         toppings = modifiers.get("toppings") if isinstance(modifiers.get("toppings"), dict) else {}
         sauces = modifiers.get("sauces") if isinstance(modifiers.get("sauces"), dict) else {}
         return {
@@ -243,6 +253,7 @@ class ElevenLabsAgentService:
             "price_label": self._format_kr(int(item["base_price"])),
             "ingredients": self._ingredients_from_description(str(item.get("description") or "")),
             "size_prices": size_prices or {"standard": self._format_kr(int(item["base_price"]))},
+            "available_sizes": available_sizes,
             "available_toppings": [str(name) for name in toppings],
             "available_sauces": [str(name) for name in sauces],
             "allows_half_and_half": bool(modifiers.get("half_and_half")),
@@ -256,11 +267,38 @@ class ElevenLabsAgentService:
         modifiers: dict[str, Any],
     ) -> BuiltOrderItem:
         all_items = await self.get_menu_items(session, include_unavailable=True)
-        known_item = self._find_known_item(item_name, all_items)
+        cleaned_name, size_from_name = self._extract_size_from_name(item_name)
+        if size_from_name and "size" not in modifiers:
+            modifiers = {**modifiers, "size": size_from_name}
+        known_item = self._find_known_item(cleaned_name, all_items)
         if known_item is not None and not bool(known_item.get("is_available", True)):
             raise MenuValidationError(f"{known_item['name']} is currently unavailable.")
+        if known_item is None:
+            builder = OrderBuilder([item for item in all_items if item.get("is_available", True)])
+            return builder.add_item(cleaned_name, quantity, self._normalize_modifiers(modifiers))
+        modifiers = self._normalize_modifiers(modifiers, known_item)
         builder = OrderBuilder([item for item in all_items if item.get("is_available", True)])
-        return builder.add_item(item_name, quantity, self._normalize_modifiers(modifiers))
+        return builder.add_item(str(known_item["name"]), quantity, modifiers)
+
+    def _available_sizes(self, item: dict[str, Any]) -> list[dict[str, Any]]:
+        modifiers = dict(item.get("modifiers") or {})
+        sizes = modifiers.get("sizes") if isinstance(modifiers.get("sizes"), dict) else {}
+        if not sizes:
+            return [
+                {
+                    "name": "standard",
+                    "price_label": self._format_kr(int(item["base_price"])),
+                    "spoken_aliases": list(SIZE_ALIASES["standard"]),
+                }
+            ]
+        return [
+            {
+                "name": str(size),
+                "price_label": self._format_kr(int(item["base_price"]) + int(delta)),
+                "spoken_aliases": list(SIZE_ALIASES.get(str(size), (str(size),))),
+            }
+            for size, delta in sizes.items()
+        ]
 
     def _ingredients_from_description(self, description: str) -> list[str]:
         cleaned = (
@@ -289,15 +327,15 @@ class ElevenLabsAgentService:
             raise MenuValidationError("Invalid order item")
         name = str(item.get("name") or item.get("id") or "")
         quantity = int(item.get("quantity") or 1)
-        modifiers = self._normalize_modifiers(dict(item.get("modifiers") or {}))
+        modifiers = dict(item.get("modifiers") or {})
         if item.get("size"):
             modifiers["size"] = str(item["size"]).lower()
         toppings = item.get("toppings")
         if isinstance(toppings, list):
             modifiers["add_toppings"] = [str(topping).lower() for topping in toppings]
-        return name, quantity, modifiers
+        return name, quantity, self._normalize_modifiers(modifiers)
 
-    def _normalize_modifiers(self, modifiers: dict[str, Any]) -> dict[str, Any]:
+    def _normalize_modifiers(self, modifiers: dict[str, Any], menu_item: dict[str, Any] | None = None) -> dict[str, Any]:
         normalized = dict(modifiers)
         if isinstance(normalized.get("modifiers"), list):
             values = [str(value).lower() for value in normalized.pop("modifiers")]
@@ -309,8 +347,50 @@ class ElevenLabsAgentService:
             if isinstance(normalized.get(key), list):
                 normalized[key] = [str(value).lower() for value in normalized[key]]
         if isinstance(normalized.get("size"), str):
-            normalized["size"] = normalized["size"].lower()
+            normalized["size"] = self._normalize_size(normalized["size"], menu_item)
         return normalized
+
+    def _normalize_size(self, requested_size: str, menu_item: dict[str, Any] | None = None) -> str:
+        requested = requested_size.strip().casefold().replace("_", " ").replace("-", " ")
+        requested = re.sub(r"\s+", " ", requested)
+        available_sizes = self._available_size_names(menu_item)
+        if requested in available_sizes:
+            return requested
+        for canonical, aliases in SIZE_ALIASES.items():
+            if requested == canonical or requested in aliases:
+                if canonical in available_sizes:
+                    return canonical
+                if canonical == "standard":
+                    if "medium" in available_sizes:
+                        return "medium"
+                    if available_sizes:
+                        return sorted(available_sizes)[0]
+        return requested
+
+    def _available_size_names(self, menu_item: dict[str, Any] | None) -> set[str]:
+        if menu_item is None:
+            return set(SIZE_ALIASES)
+        modifiers = dict(menu_item.get("modifiers") or {})
+        sizes = modifiers.get("sizes") if isinstance(modifiers.get("sizes"), dict) else {}
+        if not sizes:
+            return {"standard"}
+        return {str(size).casefold() for size in sizes}
+
+    def _extract_size_from_name(self, requested_name: str) -> tuple[str, str | None]:
+        normalized = requested_name.strip()
+        lowered = normalized.casefold()
+        phrase_aliases = sorted(
+            ((alias, canonical) for canonical, aliases in SIZE_ALIASES.items() for alias in aliases),
+            key=lambda pair: len(pair[0]),
+            reverse=True,
+        )
+        for alias, canonical in phrase_aliases:
+            pattern = rf"(^|\s){re.escape(alias)}(\s|$)"
+            if re.search(pattern, lowered):
+                cleaned = re.sub(pattern, " ", lowered).strip()
+                cleaned = re.sub(r"\s+", " ", cleaned)
+                return cleaned or normalized, canonical
+        return normalized, None
 
     def _format_kr(self, amount_ore: int) -> str:
         return f"kr {amount_ore // 100}" if amount_ore % 100 == 0 else f"kr {amount_ore / 100:.2f}"

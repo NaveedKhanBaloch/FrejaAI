@@ -1,6 +1,6 @@
 {
     "name": "validate_item",
-    "description": "Use this before accepting, adding, or confirming any requested food or drink item. It checks whether the item exists in the live database, whether it is available, whether requested modifiers are valid, and returns calculated price information. Speak only unit_price_label or total_price_label.",
+    "description": "Use this before accepting, adding, confirming, or answering a size-specific price question for any food or drink item. Always pass the customer's requested size in the size field when they mention medium, large, family, familj, standard, or normal. It checks whether the item exists in the live database, whether it is available, whether requested modifiers are valid, and returns calculated price information. Speak only unit_price_label or total_price_label.",
     "type": "webhook",
     "api_schema": {
         "url": "https://api.freja.plenware.cloud/elevenlabs/tools/validate-item",
@@ -20,9 +20,13 @@
                     "type": "number",
                     "description": "The quantity requested by the customer. Use 1 if not specified."
                 },
+                "size": {
+                    "type": "string",
+                    "description": "The size requested by the customer. Use values exactly as spoken, for example medium, large, family, familj, standard, normal, or vanlig. Leave empty only if the customer did not ask for a size."
+                },
                 "modifiers": {
                     "type": "object",
-                    "description": "Requested size, toppings, sauces, removed ingredients, crust, or other changes."
+                    "description": "Requested toppings, sauces, removed ingredients, crust, or other changes. Put size in the top-level size field."
                 }
             }
         },
