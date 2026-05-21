@@ -95,7 +95,7 @@ class ElevenLabsAgentService:
             + "When calling confirm_order, include the known order_type. Never ask pickup/delivery again just to fill a tool field.\n"
             + "Before confirm_order, collect customer name and phone number for every order, including pickup.\n"
             + "When speaking prices aloud, say kronor instead of the abbreviation kr.\n"
-            + "When the order is confirmed, tell the customer professionally that the order is placed and they should enjoy the pizza, then end the call.\n"
+            + "When confirm_order succeeds, say one short closing sentence, then immediately call end_call. Do not ask more questions.\n"
         )
 
     async def get_restaurant(self, session: AsyncSession) -> Restaurant:
