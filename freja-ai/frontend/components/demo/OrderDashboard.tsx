@@ -24,6 +24,7 @@ interface DashboardOrder {
   total_amount: number;
   total: string;
   status: DashboardOrderStatus;
+  customer_name: string;
   customer_phone: string;
   delivery_address: string | null;
   created_at: string;
@@ -151,7 +152,7 @@ function LiveOrders() {
                 <td className="border-b border-border p-3"><span className={`rounded-pill px-2 py-1 text-xs ${order.status === "READY" ? "bg-accent text-bg" : ["CONFIRMED", "PREPARING"].includes(order.status) ? "bg-amber-500/15 text-amber-300" : "bg-bg text-text-3"}`}>{order.status}</span></td>
                 <td className="border-b border-border p-3">{["CONFIRMED", "PREPARING", "READY"].includes(order.status) ? <button onClick={(event) => { event.stopPropagation(); statusMutation.mutate({ id: order.id, status: nextStatus(order.status) }); }} className="border border-accent px-3 py-2 text-xs text-accent" disabled={statusMutation.isPending}>{order.status === "READY" ? "Complete" : "Mark Ready"}</button> : "—"}</td>
               </tr>
-              {expanded === order.id && <tr><td colSpan={7} className="border-b border-border bg-bg p-5 text-sm text-text-2"><p>{order.items.map((item) => `${item.quantity} x ${item.name}`).join(", ")}</p><p className="mt-2">Customer: {order.customer_phone}</p><p className="mt-2">{order.delivery_address ?? "Pickup order"}</p><p className="mt-3">Stored in PostgreSQL order id: {order.id}</p></td></tr>}
+              {expanded === order.id && <tr><td colSpan={7} className="border-b border-border bg-bg p-5 text-sm text-text-2"><p>{order.items_label}</p><p className="mt-2">Customer: {order.customer_name}</p><p className="mt-2">Phone: {order.customer_phone}</p><p className="mt-2">{order.delivery_address ?? "Pickup order"}</p><p className="mt-3">Stored in PostgreSQL order id: {order.id}</p></td></tr>}
             </Fragment>
           ))}
         </tbody>

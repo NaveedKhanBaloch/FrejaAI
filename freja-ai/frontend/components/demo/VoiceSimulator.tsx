@@ -71,6 +71,8 @@ export function VoiceSimulator() {
     async (parameters: Record<string, unknown>) => {
       const order = typeof parameters.order === "object" && parameters.order !== null ? { ...parameters.order } as Record<string, unknown> : { ...parameters };
       order.clientOrderId = clientOrderIdRef.current ?? `freja-demo-${Date.now()}`;
+      order.customerName = order.customerName ?? order.customer_name ?? parameters.customerName ?? parameters.customer_name;
+      order.customerPhone = order.customerPhone ?? order.customer_phone ?? order.customerPhoneNumber ?? parameters.customerPhone ?? parameters.customer_phone;
       const result = await api<ToolResult>("/elevenlabs/tools/confirm-order", {
         method: "POST",
         body: JSON.stringify({ order }),

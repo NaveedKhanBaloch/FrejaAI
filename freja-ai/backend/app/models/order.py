@@ -15,6 +15,7 @@ class Order(Base):
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     restaurant_id: Mapped[UUID] = mapped_column(ForeignKey("restaurants.id", ondelete="CASCADE"), index=True)
     call_log_id: Mapped[UUID | None] = mapped_column(ForeignKey("call_logs.id", ondelete="SET NULL"), index=True)
+    customer_name: Mapped[str | None] = mapped_column(String(200))
     customer_phone: Mapped[str] = mapped_column(String(32), index=True)
     items: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list, nullable=False)
     total_amount: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

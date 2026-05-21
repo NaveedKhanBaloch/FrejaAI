@@ -69,6 +69,7 @@ def upgrade() -> None:
         sa.Column("id", sa.Uuid(), nullable=False),
         sa.Column("restaurant_id", sa.Uuid(), nullable=False),
         sa.Column("call_log_id", sa.Uuid(), nullable=True),
+        sa.Column("customer_name", sa.String(length=200), nullable=True),
         sa.Column("customer_phone", sa.String(length=32), nullable=False),
         sa.Column("items", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
         sa.Column("total_amount", sa.Integer(), nullable=False),

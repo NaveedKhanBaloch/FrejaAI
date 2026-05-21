@@ -38,9 +38,10 @@ class OrderService:
         await self._automation.trigger("order.status_updated", {"order_id": str(order.id), "status": order.status})
         return order
 
-    async def create_order(self, restaurant_id: UUID, customer_phone: str, items: list[dict[str, Any]], order_type: str, delivery_address: str | None) -> Order:
+    async def create_order(self, restaurant_id: UUID, customer_phone: str, items: list[dict[str, Any]], order_type: str, delivery_address: str | None, customer_name: str | None = None) -> Order:
         order = Order(
             restaurant_id=restaurant_id,
+            customer_name=customer_name,
             customer_phone=customer_phone,
             items=items,
             total_amount=sum(int(item["total_price"]) for item in items),

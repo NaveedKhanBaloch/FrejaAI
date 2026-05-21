@@ -3,6 +3,7 @@ import asyncio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.engine import make_url
+from sqlalchemy import text
 
 from app.config import get_settings
 from app.database import Base, SessionLocal, engine
@@ -48,6 +49,7 @@ async def seed_demo_data() -> None:
         try:
             async with engine.begin() as connection:
                 await connection.run_sync(Base.metadata.create_all)
+                await connection.execute(text("ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_name VARCHAR(200)"))
             async with SessionLocal() as session:
                 await ensure_demo_restaurant(session)
             return

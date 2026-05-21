@@ -48,8 +48,8 @@ def _hour_label(value: datetime) -> str:
 
 
 def _mask_phone(phone: str | None) -> str:
-    if not phone:
-        return "Unknown"
+    if not phone or phone in {"unknown", "not_provided"}:
+        return "Not provided"
     return f"{phone[:3]} *** *** {phone[-3:]}"
 
 
@@ -58,7 +58,29 @@ def _item_label(items: list[dict[str, Any]]) -> str:
     for item in items:
         quantity = int(item.get("quantity") or 1)
         name = str(item.get("name") or "Item")
-        labels.append(f"{name} x{quantity}" if quantity > 1 else name)
+        modifiers = item.get("modifiers") if isinstance(item.get("modifiers"), dict) else {}
+        size = item.get("size") or modifiers.get("size")
+        flavor = item.get("flavor") or modifiers.get("flavor") or modifiers.get("flavour")
+        if not flavor and isinstance(modifiers.get("flavors"), list) and modifiers["flavors"]:
+            flavor = modifiers["flavors"][0]
+        if not flavor and isinstance(modifiers.get("flavors"), str):
+            flavor = modifiers["flavors"]
+        details = []
+        if size:
+            details.append(str(size).title())
+        if flavor:
+            details.append(str(flavor))
+        for key, value in modifiers.items():
+            if key in {"size", "flavor", "flavour", "flavors"} or value in {None, False, "", []}:
+                continue
+            if isinstance(value, list):
+                details.extend(f"{key}: {entry}" for entry in value)
+            elif value is True:
+                details.append(str(key).replace("_", " "))
+            else:
+                details.append(f"{key}: {value}")
+        detail_label = f" — {', '.join(details)}" if details else ""
+        labels.append(f"{quantity} x {name}{detail_label}")
     return ", ".join(labels)
 
 
@@ -88,6 +110,7 @@ def _serialize_order(order: Order) -> dict[str, Any]:
         "total_amount": order.total_amount,
         "total": f"kr {order.total_amount // 100}" if order.total_amount % 100 == 0 else f"kr {order.total_amount / 100:.2f}",
         "status": order.status.upper(),
+        "customer_name": order.customer_name or "Not provided",
         "customer_phone": _mask_phone(order.customer_phone),
         "delivery_address": order.delivery_address,
         "created_at": order.created_at.isoformat(),

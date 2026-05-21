@@ -93,6 +93,8 @@ class ElevenLabsAgentService:
             + "For pickup orders, never ask for a delivery address.\n"
             + "For delivery orders, collect the delivery address before confirmation.\n"
             + "When calling confirm_order, include the known order_type. Never ask pickup/delivery again just to fill a tool field.\n"
+            + "Before confirm_order, collect customer name and phone number for every order, including pickup.\n"
+            + "When speaking prices aloud, say kronor instead of the abbreviation kr.\n"
             + "When the order is confirmed, tell the customer professionally that the order is placed and they should enjoy the pizza, then end the call.\n"
         )
 
@@ -207,7 +209,7 @@ class ElevenLabsAgentService:
         call_log = CallLog(
             restaurant_id=restaurant.id,
             call_uuid=idempotency_key,
-            customer_phone=str(order.get("customer_phone") or "unknown"),
+            customer_phone=self._resolve_customer_phone(order),
             duration_seconds=int(order.get("duration_seconds") or 0),
             transcript=str(order.get("transcript") or "Order confirmed by ElevenLabs voice agent."),
             recording_url=order.get("recording_url") if isinstance(order.get("recording_url"), str) else None,
@@ -221,7 +223,8 @@ class ElevenLabsAgentService:
         saved_order = Order(
             restaurant_id=restaurant.id,
             call_log_id=call_log.id,
-            customer_phone=str(order.get("customer_phone") or "unknown"),
+            customer_name=self._resolve_customer_name(order),
+            customer_phone=self._resolve_customer_phone(order),
             items=saved_items,
             total_amount=total_amount,
             order_type=normalized_type,
@@ -404,6 +407,9 @@ class ElevenLabsAgentService:
         toppings = item.get("toppings")
         if isinstance(toppings, list):
             modifiers["add_toppings"] = [str(topping).lower() for topping in toppings]
+        flavor = item.get("flavor") or item.get("flavour")
+        if isinstance(flavor, str) and flavor.strip():
+            modifiers["flavor"] = flavor.strip()
         return name, quantity, self._normalize_modifiers(modifiers)
 
     def _resolve_order_type(self, order: dict[str, Any]) -> str:
@@ -427,6 +433,32 @@ class ElevenLabsAgentService:
         if normalized_from_text:
             return normalized_from_text
         return "pickup"
+
+    def _resolve_customer_name(self, order: dict[str, Any]) -> str | None:
+        value = order.get("customer_name") or order.get("customerName") or order.get("name") or order.get("customer")
+        if isinstance(value, dict):
+            value = value.get("name") or value.get("full_name") or value.get("fullName")
+        if not isinstance(value, str):
+            return None
+        cleaned = value.strip()
+        return cleaned or None
+
+    def _resolve_customer_phone(self, order: dict[str, Any]) -> str:
+        value = (
+            order.get("customer_phone")
+            or order.get("customerPhone")
+            or order.get("customer_phone_number")
+            or order.get("customerPhoneNumber")
+            or order.get("phone")
+            or order.get("phone_number")
+            or order.get("phoneNumber")
+        )
+        if isinstance(value, dict):
+            value = value.get("phone") or value.get("number")
+        if not isinstance(value, str):
+            return "not_provided"
+        cleaned = value.strip()
+        return cleaned or "not_provided"
 
     def _normalize_order_type(self, value: Any) -> str | None:
         if value is None:

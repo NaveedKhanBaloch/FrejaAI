@@ -17,12 +17,14 @@
                     "description": "Complete final order. Include the locked order_type already given by the customer. For pickup, set order_type to pickup and do not include a delivery address. For delivery, set order_type to delivery and include delivery_address.",
                     "required": [
                         "orderType",
-                        "items"
+                        "items",
+                        "customerName",
+                        "customerPhone"
                     ],
                     "properties": {
                         "items": {
                             "type": "array",
-                            "description": "Confirmed order items with name, quantity, size, and modifiers.",
+                            "description": "Confirmed order items with name, quantity, size, flavor for drinks, and modifiers.",
                             "items": {
                                 "type": "object",
                                 "properties": {
@@ -41,6 +43,10 @@
                                     "modifiers": {
                                         "type": "object",
                                         "description": "Toppings, sauces, crust, removed ingredients, or other confirmed changes."
+                                    },
+                                    "flavor": {
+                                        "type": "string",
+                                        "description": "Drink flavor/name if applicable, for example Coca-Cola, Fanta, Sprite, or mineralvatten."
                                     }
                                 }
                             }
@@ -76,6 +82,14 @@
                         "clientOrderId": {
                             "type": "string",
                             "description": "Optional idempotency key for this voice call/order. Use the same value if confirm_order is retried."
+                        },
+                        "customerName": {
+                            "type": "string",
+                            "description": "Required. Customer name collected before final confirmation."
+                        },
+                        "customerPhone": {
+                            "type": "string",
+                            "description": "Required. Customer phone number collected before final confirmation."
                         }
                     }
                 }

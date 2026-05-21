@@ -20,6 +20,7 @@ class OrderItem(BaseModel):
 
 
 class OrderCreate(BaseModel):
+    customer_name: str | None = None
     customer_phone: str
     items: list[OrderItem]
     order_type: OrderType
@@ -36,6 +37,7 @@ class OrderRead(BaseModel):
     id: UUID
     restaurant_id: UUID
     call_log_id: UUID | None
+    customer_name: str | None
     customer_phone: str
     items: list[dict[str, Any]]
     total_amount: int
