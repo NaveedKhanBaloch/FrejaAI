@@ -1,6 +1,6 @@
 {
     "name": "confirm_order",
-    "description": "Use this only after the customer clearly confirms the complete final order. It validates the final order against the live database, saves the order in Freja, and sends it to the restaurant dashboard and kitchen display.",
+    "description": "Use this only after the customer clearly confirms the complete final order. It validates the final order against the live database, saves the order in Freja, and sends it to the restaurant dashboard and kitchen display. Speak only the formatted total and item price labels returned by this tool.",
     "type": "webhook",
     "api_schema": {
         "url": "https://api.freja.plenware.cloud/elevenlabs/tools/confirm-order",

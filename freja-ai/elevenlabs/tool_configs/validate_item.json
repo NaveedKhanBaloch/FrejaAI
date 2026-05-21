@@ -1,6 +1,6 @@
 {
     "name": "validate_item",
-    "description": "Use this before accepting, adding, or confirming any requested food or drink item. It checks whether the item exists in the live database, whether it is available, whether requested modifiers are valid, and returns calculated price information.",
+    "description": "Use this before accepting, adding, or confirming any requested food or drink item. It checks whether the item exists in the live database, whether it is available, whether requested modifiers are valid, and returns calculated price information. Speak only unit_price_label or total_price_label.",
     "type": "webhook",
     "api_schema": {
         "url": "https://api.freja.plenware.cloud/elevenlabs/tools/validate-item",

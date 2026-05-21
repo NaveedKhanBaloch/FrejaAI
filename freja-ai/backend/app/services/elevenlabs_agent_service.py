@@ -7,7 +7,7 @@ from rapidfuzz import fuzz, process
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.ai.order_builder import MenuValidationError, OrderBuilder
+from app.ai.order_builder import BuiltOrderItem, MenuValidationError, OrderBuilder
 from app.ai.prompts.system_prompt import build_system_prompt
 from app.config import get_settings
 from app.models.call_log import CallLog
@@ -74,6 +74,7 @@ class ElevenLabsAgentService:
             base_prompt
             + "\n\nVOICE AGENT TOOL RULES:\n"
             + "Use the configured tools as the source of truth. Do not guess prices or availability.\n"
+            + "Only speak prices from fields ending in _label or from kr-formatted strings. Never speak raw integer money values from backend records.\n"
             + "Call get_menu before listing available menu items if you are unsure.\n"
             + "Call validate_item before confirming an item or modifier.\n"
             + "Call confirm_order only after the customer clearly approves the final summary.\n"
@@ -119,23 +120,18 @@ class ElevenLabsAgentService:
         return {"restaurant_name": restaurant.name, "menu": [self._serialize_menu_item(item) for item in menu]}
 
     async def validate_item(self, session: AsyncSession, item_name: str, quantity: int = 1, modifiers: dict[str, Any] | None = None) -> dict[str, Any]:
-        all_items = await self.get_menu_items(session, include_unavailable=True)
-        known_item = self._find_known_item(item_name, all_items)
-        if known_item is not None and not bool(known_item.get("is_available", True)):
-            raise MenuValidationError(f"{known_item['name']} is currently unavailable.")
-        builder = OrderBuilder([item for item in all_items if item.get("is_available", True)])
-        item = builder.add_item(item_name, quantity, self._normalize_modifiers(modifiers or {}))
+        item = await self._build_validated_item(session, item_name, quantity, modifiers or {})
         return {
             "valid": True,
             "item": {
                 "name": item.name,
                 "quantity": item.quantity,
-                "unit_price": item.unit_price,
-                "total_price": item.total_price,
+                "unit_price_label": self._format_kr(item.unit_price),
+                "total_price_label": self._format_kr(item.total_price),
                 "modifiers": item.modifiers,
                 "allergens": item.allergens,
             },
-            "message": f"{item.quantity} x {item.name} is available.",
+            "message": f"{item.quantity} x {item.name} is available for {self._format_kr(item.total_price)}.",
         }
 
     async def confirm_order(self, session: AsyncSession, order: dict[str, Any]) -> dict[str, Any]:
@@ -152,13 +148,36 @@ class ElevenLabsAgentService:
         if not isinstance(items, list) or not items:
             raise MenuValidationError("Order must include at least one item")
 
-        built_items: list[dict[str, Any]] = []
+        saved_items: list[dict[str, Any]] = []
+        ticket_items: list[dict[str, Any]] = []
         total_amount = 0
         for raw_item in items:
             name, quantity, modifiers = self._extract_item(raw_item)
-            built = (await self.validate_item(session, name, quantity, modifiers))["item"]
-            built_items.append(built)
-            total_amount += int(built["total_price"])
+            built = await self._build_validated_item(session, name, quantity, modifiers)
+            saved_items.append(
+                {
+                    "menu_item_id": str(built.menu_item_id),
+                    "name": built.name,
+                    "quantity": built.quantity,
+                    "unit_price": built.unit_price,
+                    "total_price": built.total_price,
+                    "unit_price_label": self._format_kr(built.unit_price),
+                    "total_price_label": self._format_kr(built.total_price),
+                    "modifiers": built.modifiers,
+                    "allergens": built.allergens,
+                }
+            )
+            ticket_items.append(
+                {
+                    "name": built.name,
+                    "quantity": built.quantity,
+                    "unit_price_label": self._format_kr(built.unit_price),
+                    "total_price_label": self._format_kr(built.total_price),
+                    "modifiers": built.modifiers,
+                    "allergens": built.allergens,
+                }
+            )
+            total_amount += built.total_price
 
         call_log = CallLog(
             restaurant_id=restaurant.id,
@@ -178,7 +197,7 @@ class ElevenLabsAgentService:
             restaurant_id=restaurant.id,
             call_log_id=call_log.id,
             customer_phone=str(order.get("customer_phone") or "unknown"),
-            items=built_items,
+            items=saved_items,
             total_amount=total_amount,
             order_type=normalized_type,
             delivery_address=str(address) if normalized_type == "delivery" else None,
@@ -193,7 +212,7 @@ class ElevenLabsAgentService:
             "id": f"#{str(saved_order.id)[:4].upper()}",
             "order_id": str(saved_order.id),
             "type": normalized_type.upper(),
-            "items": built_items,
+            "items": ticket_items,
             "address": str(address) if normalized_type == "delivery" else None,
             "eta": "25-35 min" if normalized_type == "delivery" else "15-20 min",
             "total": self._format_kr(total_amount),
@@ -211,14 +230,37 @@ class ElevenLabsAgentService:
             str(size): self._format_kr(int(item["base_price"]) + int(delta))
             for size, delta in sizes.items()
         }
+        toppings = modifiers.get("toppings") if isinstance(modifiers.get("toppings"), dict) else {}
+        sauces = modifiers.get("sauces") if isinstance(modifiers.get("sauces"), dict) else {}
         return {
-            **item,
             "id": str(item["id"]),
-            "price": self._format_kr(int(item["base_price"])),
-            "base_price_ore": item["base_price"],
+            "name": item["name"],
+            "category": item["category"],
+            "description": item.get("description"),
+            "is_available": bool(item.get("is_available", True)),
+            "allergens": item.get("allergens", []),
+            "sort_order": item.get("sort_order", 0),
+            "price_label": self._format_kr(int(item["base_price"])),
             "ingredients": self._ingredients_from_description(str(item.get("description") or "")),
             "size_prices": size_prices or {"standard": self._format_kr(int(item["base_price"]))},
+            "available_toppings": [str(name) for name in toppings],
+            "available_sauces": [str(name) for name in sauces],
+            "allows_half_and_half": bool(modifiers.get("half_and_half")),
         }
+
+    async def _build_validated_item(
+        self,
+        session: AsyncSession,
+        item_name: str,
+        quantity: int,
+        modifiers: dict[str, Any],
+    ) -> BuiltOrderItem:
+        all_items = await self.get_menu_items(session, include_unavailable=True)
+        known_item = self._find_known_item(item_name, all_items)
+        if known_item is not None and not bool(known_item.get("is_available", True)):
+            raise MenuValidationError(f"{known_item['name']} is currently unavailable.")
+        builder = OrderBuilder([item for item in all_items if item.get("is_available", True)])
+        return builder.add_item(item_name, quantity, self._normalize_modifiers(modifiers))
 
     def _ingredients_from_description(self, description: str) -> list[str]:
         cleaned = (

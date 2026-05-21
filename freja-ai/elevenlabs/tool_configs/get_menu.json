@@ -1,6 +1,6 @@
 {
     "name": "get_menu",
-    "description": "Use this before mentioning menu items, prices, ingredients, allergens, sizes, modifiers, drinks, sides, desserts, or availability. Returns the current restaurant menu from Freja's live backend database.",
+    "description": "Use this before mentioning menu items, prices, ingredients, allergens, sizes, modifiers, drinks, sides, desserts, or availability. Returns the current restaurant menu from Freja's live backend database. Speak only formatted price_label or size_prices values, never raw numeric backend money values.",
     "type": "webhook",
     "api_schema": {
         "url": "https://api.freja.plenware.cloud/elevenlabs/tools/menu",
