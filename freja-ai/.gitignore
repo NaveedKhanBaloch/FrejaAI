@@ -23,6 +23,7 @@ env/
 
 # Node / Next.js
 node_modules/
+.tools/
 .next/
 out/
 dist/

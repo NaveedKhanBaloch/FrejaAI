@@ -1,0 +1,24 @@
+{
+    "name": "handoff_to_human",
+    "description": "Use this when the customer asks for a human, becomes frustrated, the request is too complex, or the order cannot be completed safely.",
+    "type": "webhook",
+    "api_schema": {
+        "url": "https://api.freja.plenware.cloud/elevenlabs/tools/handoff",
+        "method": "POST",
+        "request_body_schema": {
+            "type": "object",
+            "description": "No input is required for handoff.",
+            "properties": {}
+        },
+        "request_headers": {
+            "Content-Type": "application/json"
+        }
+    },
+    "response_timeout_secs": 20,
+    "dynamic_variables": {
+        "dynamic_variable_placeholders": {}
+    },
+    "assignments": [],
+    "disable_interruptions": false,
+    "force_pre_tool_speech": false
+}

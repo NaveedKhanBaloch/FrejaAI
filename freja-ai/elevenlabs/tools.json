@@ -1,0 +1,24 @@
+{
+    "tools": [
+        {
+            "type": "webhook",
+            "config": "tool_configs/get_menu.json",
+            "id": "tool_8501ks51f6smebprzpr5qhbar38w"
+        },
+        {
+            "type": "webhook",
+            "config": "tool_configs/validate_item.json",
+            "id": "tool_3601ks51f735eyw8gqqas8ky9wcz"
+        },
+        {
+            "type": "webhook",
+            "config": "tool_configs/confirm_order.json",
+            "id": "tool_4401ks51f7crfbra0b3cgqjx4ztz"
+        },
+        {
+            "type": "webhook",
+            "config": "tool_configs/handoff_to_human.json",
+            "id": "tool_9201ks51f7pjf31bke1c6nsdksrt"
+        }
+    ]
+}

@@ -30,7 +30,9 @@ class LLMService:
     ) -> AsyncIterator[str]:
         session = await self._sessions.get(call_uuid)
         history = list(session.get("history", []))[-20:]
-        state = await self._graph.run_turn(
+        final_state: dict[str, Any] | None = None
+        assistant_text_parts: list[str] = []
+        async for event in self._graph.stream_turn(
             {
                 "transcript": user_text,
                 "stt_language": detected_language,
@@ -43,14 +45,21 @@ class LLMService:
                 "history": history,
                 "order_state": order_state,
             }
-        )
-        full_text = str(state.get("assistant_text") or "").strip()
-        if full_text:
-            yield full_text
+        ):
+            if event["type"] == "assistant_delta":
+                delta = str(event["text"])
+                assistant_text_parts.append(delta)
+                yield delta
+                continue
+            if event["type"] == "final":
+                final_state = dict(event["state"])
+        if final_state is None:
+            raise RuntimeError("Voice agent graph did not produce final state")
+        full_text = "".join(assistant_text_parts).strip() or str(final_state.get("assistant_text") or "").strip()
         await self._sessions.append_history(call_uuid, "user", user_text)
         await self._sessions.append_history(call_uuid, "assistant", full_text)
-        if isinstance(state.get("order_state"), dict):
-            await self._sessions.update(call_uuid, order_state=state["order_state"])
+        if isinstance(final_state.get("order_state"), dict):
+            await self._sessions.update(call_uuid, order_state=final_state["order_state"])
 
     def extract_order_actions(self, response: str) -> list[dict[str, Any]]:
         actions: list[dict[str, Any]] = []

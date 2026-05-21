@@ -1,15 +1,28 @@
 import { NextRequest } from "next/server";
 
+function backendUrl() {
+  if (process.env.NODE_ENV === "production" && process.env.BACKEND_INTERNAL_URL) {
+    return process.env.BACKEND_INTERNAL_URL;
+  }
+  if (process.env.NODE_ENV === "production") {
+    return "http://backend:8000";
+  }
+  return process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+}
+
 async function proxy(request: NextRequest, context: { params: Promise<{ proxy: string[] }> }) {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
   const params = await context.params;
   const path = params.proxy.join("/");
   const url = new URL(request.url);
-  const target = `${apiUrl}/${path}${url.search}`;
+  const target = `${backendUrl()}/${path}${url.search}`;
+  const headers = new Headers(request.headers);
+  headers.delete("host");
+  headers.delete("connection");
+
   try {
     return await fetch(target, {
       method: request.method,
-      headers: request.headers,
+      headers,
       body: ["GET", "HEAD"].includes(request.method) ? undefined : await request.text(),
     });
   } catch (error) {

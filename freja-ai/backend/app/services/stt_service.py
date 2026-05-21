@@ -73,7 +73,15 @@ class DeepgramSTTService:
                 await asyncio.gather(sender, return_exceptions=True)
 
     async def _send_audio(self, ws: Any, audio: AsyncIterator[bytes]) -> None:
-        async for chunk in audio:
+        iterator = audio.__aiter__()
+        while True:
+            try:
+                chunk = await asyncio.wait_for(anext(iterator), timeout=3.0)
+            except asyncio.TimeoutError:
+                await ws.send(json.dumps({"type": "KeepAlive"}))
+                continue
+            except StopAsyncIteration:
+                break
             await ws.send(chunk)
         await ws.send(json.dumps({"type": "CloseStream"}))
 

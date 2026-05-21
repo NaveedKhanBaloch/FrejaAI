@@ -8,6 +8,16 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
+def _running_in_container() -> bool:
+    return Path("/.dockerenv").exists()
+
+
+def _localize_container_hostname(value: object, service: str) -> object:
+    if _running_in_container() or not isinstance(value, str):
+        return value
+    return value.replace(f"@{service}:", "@localhost:").replace(f"//{service}:", "//localhost:")
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=(PROJECT_ROOT / ".env", ".env"),
@@ -32,7 +42,11 @@ class Settings(BaseSettings):
     deepgram_api_key: str = "local"
     openai_api_key: str = "local"
     elevenlabs_api_key: str = "local"
+    elevenlabs_agent_id: str | None = None
+    elevenlabs_tool_secret: str | None = None
     demo_restaurant_name: str = "Pizza Palazzo"
+    demo_restaurant_phone: str = "+46101234567"
+    demo_restaurant_vonage_number: str = "+46107654321"
     demo_elevenlabs_voice_id: str = "JBFqnCBsd6RMkjVDRZzb"
 
     jwt_private_key: str | None = None
@@ -51,6 +65,16 @@ class Settings(BaseSettings):
         if value == "":
             return None
         return value
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def localize_database_url(cls, value: object) -> object:
+        return _localize_container_hostname(value, "postgres")
+
+    @field_validator("redis_url", mode="before")
+    @classmethod
+    def localize_redis_url(cls, value: object) -> object:
+        return _localize_container_hostname(value, "redis")
 
 
 @lru_cache

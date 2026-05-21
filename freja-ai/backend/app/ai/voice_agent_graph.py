@@ -1,4 +1,6 @@
 import json
+import asyncio
+from collections.abc import AsyncIterator
 from datetime import datetime, timezone
 from typing import Any, TypedDict
 
@@ -54,6 +56,27 @@ class VoiceAgentGraph:
         result = await self._graph.ainvoke(state)
         return dict(result)
 
+    async def stream_turn(self, state: VoiceAgentState) -> AsyncIterator[dict[str, Any]]:
+        language_updates = await self._detect_language(state)
+        detected_state: VoiceAgentState = {**state, **language_updates}
+        assistant_text = ""
+        async for delta in self._stream_assistant_text(detected_state):
+            assistant_text += delta
+            yield {"type": "assistant_delta", "text": delta}
+
+        extraction_task = asyncio.create_task(self._extract_and_validate(detected_state, assistant_text))
+        try:
+            yield {
+                "type": "assistant_done",
+                "assistant_text": assistant_text,
+                "language": detected_state.get("language", "sv"),
+            }
+            yield {"type": "final", "state": await extraction_task}
+        finally:
+            if not extraction_task.done():
+                extraction_task.cancel()
+                await asyncio.gather(extraction_task, return_exceptions=True)
+
     async def _detect_language(self, state: VoiceAgentState) -> dict[str, Any]:
         if state.get("language_locked"):
             return {"language": state.get("language", "sv"), "language_locked": True}
@@ -73,6 +96,17 @@ class VoiceAgentGraph:
         return updates
 
     async def _plan_response(self, state: VoiceAgentState) -> dict[str, Any]:
+        assistant_text = ""
+        async for delta in self._stream_assistant_text(state):
+            assistant_text += delta
+        return await self._extract_state_from_turn(state, assistant_text)
+
+    async def _extract_and_validate(self, state: VoiceAgentState, assistant_text: str) -> VoiceAgentState:
+        planned_state = await self._extract_state_from_turn(state, assistant_text)
+        validated_state = await self._validate_order({**state, **planned_state})
+        return {**state, **planned_state, **validated_state, "assistant_text": assistant_text}
+
+    async def _stream_assistant_text(self, state: VoiceAgentState) -> AsyncIterator[str]:
         system_prompt = build_system_prompt(
             state["restaurant_name"],
             state["menu"],
@@ -85,7 +119,7 @@ class VoiceAgentGraph:
                 "role": "system",
                 "content": system_prompt
                 + "\n\nYou are running inside a LangGraph voice-ordering workflow. "
-                + "Reply as strict JSON only with keys: assistant_text, order_complete, call_ended, order. "
+                + "Reply with only the exact words Freja should say to the customer. Do not return JSON in this response. "
                 + "Treat these backend services as tools you must respect: menu validation, order validation, order confirmation, and human handoff. "
                 + "Never invent menu items. Keep order null until enough information exists. "
                 + "order_complete is true only after the customer clearly confirms the final summary. "
@@ -100,14 +134,54 @@ class VoiceAgentGraph:
         completion = await self._client.chat.completions.create(
             model="gpt-4o-mini",
             messages=messages,
-            response_format={"type": "json_object"},
+            stream=True,
             temperature=0.2,
+        )
+        async for chunk in completion:
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta.content or ""
+            if delta:
+                yield delta
+
+    async def _extract_state_from_turn(self, state: VoiceAgentState, assistant_text: str) -> dict[str, Any]:
+        system_prompt = build_system_prompt(
+            state["restaurant_name"],
+            state["menu"],
+            state.get("language", "sv"),
+            state.get("order_state", {}),
+            datetime.now(timezone.utc),
+        )
+        messages = [
+            {
+                "role": "system",
+                "content": system_prompt
+                + "\n\nExtract the updated voice-ordering state from the latest customer turn and Freja response. "
+                + "Reply as strict JSON only with keys: assistant_text, order_complete, call_ended, order. "
+                + "assistant_text must exactly equal the Freja response provided by the developer message. "
+                + "order is null until enough information exists. "
+                + "order_complete is true only after the customer clearly confirms the final summary. "
+                + "For pickup/avhämtning set order.address to null. For delivery/leverans require an address before confirmation.",
+            },
+            *state.get("history", [])[-12:],
+            {"role": "user", "content": state.get("transcript", "")},
+            {"role": "assistant", "content": assistant_text},
+            {
+                "role": "system",
+                "content": f"Freja response to preserve exactly as assistant_text: {assistant_text}",
+            },
+        ]
+        completion = await self._client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=messages,
+            response_format={"type": "json_object"},
+            temperature=0.0,
         )
         raw = completion.choices[0].message.content or "{}"
         payload = self._parse_payload(raw)
         return {
             "model_raw": raw,
-            "assistant_text": str(payload.get("assistant_text") or "Could you repeat that?"),
+            "assistant_text": assistant_text or str(payload.get("assistant_text") or "Could you repeat that?"),
             "order_complete": bool(payload.get("order_complete")),
             "call_ended": bool(payload.get("call_ended")),
             "order": payload.get("order") if isinstance(payload.get("order"), dict) else None,

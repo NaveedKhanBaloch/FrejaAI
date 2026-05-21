@@ -9,7 +9,15 @@ function formatOrderItem(item: string | DemoOrderItem): string {
   const quantity = item.quantity ?? 1;
   const size = item.size ? `${item.size.toUpperCase()} ` : "";
   const name = item.name ?? item.id ?? "Pizza";
-  const details = [...(item.toppings ?? []), ...(item.modifiers ?? [])];
+  const modifierValues = Array.isArray(item.modifiers)
+    ? item.modifiers
+    : Object.entries(item.modifiers ?? {}).flatMap(([key, value]) => {
+        if (Array.isArray(value)) return value.map((entry) => `${key}: ${entry}`);
+        if (value === true) return [key];
+        if (value) return [`${key}: ${String(value)}`];
+        return [];
+      });
+  const details = [...(item.toppings ?? []), ...modifierValues];
   const suffix = details.length > 0 ? ` — ${details.join(", ")}` : item.notes ? ` — ${item.notes}` : "";
 
   return `${quantity}× ${size}${name}${suffix}`;

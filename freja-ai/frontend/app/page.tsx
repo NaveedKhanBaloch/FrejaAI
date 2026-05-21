@@ -1,4 +1,3 @@
-import { DashboardPreview } from "@/components/sections/DashboardPreview";
 import { Features } from "@/components/sections/Features";
 import { FinalCTA } from "@/components/sections/FinalCTA";
 import { Hero } from "@/components/sections/Hero";
@@ -22,7 +21,6 @@ export default function Home() {
         <Features />
         <PlatformComparison />
         <VoiceBotDemo />
-        <DashboardPreview />
         <Testimonials />
         <Pricing />
         <FinalCTA />

@@ -49,10 +49,14 @@ async def demo_voice_ws(websocket: WebSocket) -> None:
             last_final_text = normalized_text
             last_final_at = now
             async with response_lock:
-                response = await agent.respond(text, language, confidence)
-                await websocket.send_json({"type": "assistant", **response})
-                if response["order_complete"]:
-                    await websocket.send_json({"type": "order", "order": response["order"]})
+                async for agent_event in agent.stream_respond(text, language, confidence):
+                    if agent_event["type"] == "assistant_delta":
+                        await websocket.send_json({"type": "assistant_delta", "text": agent_event["text"]})
+                        continue
+                    response = agent_event["response"]
+                    await websocket.send_json({"type": "assistant", **response})
+                    if response["order_complete"]:
+                        await websocket.send_json({"type": "order", "order": response["order"]})
 
         async def delayed_final(text: str, language: str | None, confidence: float) -> None:
             await asyncio.sleep(0.9)

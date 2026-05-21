@@ -49,8 +49,8 @@ services:
   frontend:
     build:
       context: ./frontend
-    env_file:
-      - .env
+    environment:
+      BACKEND_INTERNAL_URL: http://backend:8000
     depends_on:
       backend:
         condition: service_healthy

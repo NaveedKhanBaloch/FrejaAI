@@ -5,5 +5,5 @@ import { api } from "@/lib/api";
 import type { CallLog } from "@/types";
 
 export function useCalls() {
-  return useQuery({ queryKey: ["calls"], queryFn: () => api<CallLog[]>("/calls") });
+  return useQuery({ queryKey: ["calls"], queryFn: () => api<CallLog[]>("/dashboard/calls"), refetchInterval: 10000 });
 }

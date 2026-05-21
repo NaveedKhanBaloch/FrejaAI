@@ -1,0 +1,40 @@
+{
+    "name": "validate_item",
+    "description": "Use this before accepting, adding, or confirming any requested food or drink item. It checks whether the item exists in the live database, whether it is available, whether requested modifiers are valid, and returns calculated price information.",
+    "type": "webhook",
+    "api_schema": {
+        "url": "https://api.freja.plenware.cloud/elevenlabs/tools/validate-item",
+        "method": "POST",
+        "request_body_schema": {
+            "type": "object",
+            "description": "Requested item validation payload.",
+            "required": [
+                "itemName"
+            ],
+            "properties": {
+                "itemName": {
+                    "type": "string",
+                    "description": "The food or drink item requested by the customer."
+                },
+                "quantity": {
+                    "type": "number",
+                    "description": "The quantity requested by the customer. Use 1 if not specified."
+                },
+                "modifiers": {
+                    "type": "object",
+                    "description": "Requested size, toppings, sauces, removed ingredients, crust, or other changes."
+                }
+            }
+        },
+        "request_headers": {
+            "Content-Type": "application/json"
+        }
+    },
+    "response_timeout_secs": 20,
+    "dynamic_variables": {
+        "dynamic_variable_placeholders": {}
+    },
+    "assignments": [],
+    "disable_interruptions": false,
+    "force_pre_tool_speech": false
+}

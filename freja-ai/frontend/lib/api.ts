@@ -33,7 +33,11 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     }
     throw new Error(message);
   }
-  return response.json() as Promise<T>;
+  if (response.status === 204) {
+    return undefined as T;
+  }
+  const text = await response.text();
+  return (text ? JSON.parse(text) : undefined) as T;
 }
 
 export function eventSource(path: string) {

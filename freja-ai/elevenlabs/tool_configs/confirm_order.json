@@ -1,0 +1,32 @@
+{
+    "name": "confirm_order",
+    "description": "Use this only after the customer clearly confirms the complete final order. It validates the final order against the live database, saves the order in Freja, and sends it to the restaurant dashboard and kitchen display.",
+    "type": "webhook",
+    "api_schema": {
+        "url": "https://api.freja.plenware.cloud/elevenlabs/tools/confirm-order",
+        "method": "POST",
+        "request_body_schema": {
+            "type": "object",
+            "description": "Final order confirmation payload.",
+            "required": [
+                "order"
+            ],
+            "properties": {
+                "order": {
+                    "type": "object",
+                    "description": "Complete order including items, order_type or type, customer name, phone number if available, delivery address if delivery, language, and transcript if available."
+                }
+            }
+        },
+        "request_headers": {
+            "Content-Type": "application/json"
+        }
+    },
+    "response_timeout_secs": 30,
+    "dynamic_variables": {
+        "dynamic_variable_placeholders": {}
+    },
+    "assignments": [],
+    "disable_interruptions": false,
+    "force_pre_tool_speech": false
+}

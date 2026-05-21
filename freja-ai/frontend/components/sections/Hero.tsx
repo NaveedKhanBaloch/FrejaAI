@@ -15,7 +15,7 @@ export function Hero() {
           </p>
           <div className="mt-10 flex flex-col gap-3 sm:flex-row">
             <a href="#demo" className="bg-accent px-6 py-4 text-center font-bold text-bg">Try the voice demo</a>
-            <a href="#dashboard" className="border border-border px-6 py-4 text-center font-bold text-text-1 transition hover:border-accent">See the dashboard →</a>
+            <a href="/dashboard" className="border border-border px-6 py-4 text-center font-bold text-text-1 transition hover:border-accent">See the dashboard →</a>
           </div>
         </div>
         <div className="lg:col-span-5">

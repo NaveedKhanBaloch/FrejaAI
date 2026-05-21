@@ -3,15 +3,18 @@
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card } from "@/components/ui/Card";
 
-const calls = Array.from({ length: 12 }, (_, index) => ({ hour: `${index + 8}:00`, calls: Math.round(5 + Math.random() * 14) }));
-const languages = [
-  { language: "sv", orders: 42 },
-  { language: "en", orders: 31 },
-  { language: "ar", orders: 12 },
-  { language: "tr", orders: 8 },
-];
+interface HourlyPoint {
+  hour: string;
+  calls: number;
+  orders: number;
+}
 
-export function AnalyticsChart() {
+interface LanguagePoint {
+  name: string;
+  value: number;
+}
+
+export function AnalyticsChart({ calls, languages }: { calls: HourlyPoint[]; languages: LanguagePoint[] }) {
   return (
     <div className="grid gap-4 xl:grid-cols-2">
       <Card className="h-80">
@@ -31,10 +34,10 @@ export function AnalyticsChart() {
         <ResponsiveContainer width="100%" height="85%">
           <BarChart data={languages}>
             <CartesianGrid stroke="#e5e7eb" />
-            <XAxis dataKey="language" />
+            <XAxis dataKey="name" />
             <YAxis />
             <Tooltip />
-            <Bar dataKey="orders" fill="#d97706" />
+            <Bar dataKey="value" fill="#d97706" />
           </BarChart>
         </ResponsiveContainer>
       </Card>

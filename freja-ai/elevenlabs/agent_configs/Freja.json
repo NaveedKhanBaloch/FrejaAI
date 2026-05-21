@@ -1,0 +1,627 @@
+{
+    "name": "Freja",
+    "conversation_config": {
+        "asr": {
+            "quality": "high",
+            "provider": "elevenlabs",
+            "user_input_audio_format": "pcm_16000",
+            "keywords": []
+        },
+        "turn": {
+            "turn_timeout": 7,
+            "silence_end_call_timeout": -1,
+            "mode": "turn",
+            "turn_eagerness": "normal",
+            "spelling_patience": "auto",
+            "speculative_turn": true,
+            "retranscribe_on_turn_timeout": false,
+            "turn_model": "turn_v2",
+            "interruption_ignore_terms": [],
+            "soft_timeout_config": {
+                "timeout_seconds": -1,
+                "message": "Hhmmmm...yeah.",
+                "use_llm_generated_message": false
+            }
+        },
+        "tts": {
+            "model_id": "eleven_v3_conversational",
+            "voice_id": "iEbJsqzb6jw8MYxZ2xca",
+            "supported_voices": [],
+            "expressive_mode": true,
+            "suggested_audio_tags": [],
+            "agent_output_audio_format": "pcm_16000",
+            "optimize_streaming_latency": 3,
+            "stability": 0.5,
+            "speed": 1,
+            "similarity_boost": 0.8,
+            "text_normalisation_type": "system_prompt",
+            "pronunciation_dictionary_locators": []
+        },
+        "conversation": {
+            "text_only": false,
+            "max_duration_seconds": 600,
+            "client_events": [
+                "audio",
+                "interruption",
+                "agent_response",
+                "user_transcript",
+                "agent_response_correction",
+                "agent_tool_response",
+                "agent_chat_response_part"
+            ],
+            "file_input": {
+                "enabled": true,
+                "max_files_per_conversation": 10
+            },
+            "monitoring_enabled": false,
+            "monitoring_events": [
+                "user_transcript",
+                "agent_response",
+                "agent_response_correction"
+            ],
+            "dtmf_input_settings": null,
+            "background_music": {
+                "source_type": null,
+                "source_id": null,
+                "volume": 0.6,
+                "crossfade_loop": false
+            },
+            "source_attribution": false
+        },
+        "language_presets": {
+            "sv": {
+                "overrides": {
+                    "agent": {
+                        "first_message": "Hej, det här är Freja från Pizza Palazzo. Välkommen! Är det för avhämtning eller leverans?"
+                    }
+                },
+                "first_message_translation": {
+                    "source_hash": "{\"firstMessage\":\"Hi, this is Freja from Pizza Palazzo. Welcome! Is this for pickup or delivery?\",\"language\":\"en\"}",
+                    "text": "Hej, det här är Freja från Pizza Palazzo. Välkommen! Är det för avhämtning eller leverans?"
+                }
+            }
+        },
+        "vad": {
+            "background_voice_detection": false
+        },
+        "agent": {
+            "first_message": "Hi, this is Freja from Pizza Palazzo. Welcome! Is this for pickup or delivery?",
+            "language": "en",
+            "hinglish_mode": false,
+            "dynamic_variables": {
+                "dynamicVariablePlaceholders": {}
+            },
+            "disable_first_message_interruptions": false,
+            "max_conversation_duration_message": "",
+            "text_behavior_overrides": null,
+            "prompt": {
+                "prompt": "You are Freja, an AI voice ordering assistant for Pizza Palazzo, a pizza restaurant in Sweden.\nYou are speaking with customers by phone. Your job is to take food orders accurately, using only the restaurant data returned by the available tools.\nCRITICAL DATABASE RULES\nYou do not know the menu by memory.\nThe restaurant menu, prices, ingredients, allergens, sizes, modifiers, and availability are stored in Freja's backend database.\nYou must use tools as the source of truth.\nNever invent:\n- menu items\n- prices\n- ingredients \n- sizes\n- toppings\n- sauces\n- allergens\n- availability\n- delivery times\n- order totals\nBefore mentioning available food items, prices, ingredients, or modifiers, call `get_menu`.\nBefore accepting or confirming any requested item, call `validate_item`.\nBefore placing the final order, call `confirm_order`.\nIf a tool result does not include an item, say that the item is not currently on the menu.\nIf a tool says an item is unavailable, say it is currently unavailable and offer available alternatives from `get_menu`.\nAVAILABLE TOOLS\n1. `get_menu`\nUse this when:\n- customer asks what you have\n- customer asks for menu, prices, ingredients, allergens, sizes, toppings, drinks, sides, desserts\n- you need alternatives\n- you are unsure about anything on the menu\n2. `validate_item`\nUse this before adding any item to the order.\nUse it to check:\n- item exists\n- item is available\n- quantity is valid\n- modifiers are valid\n- price can be calculated\n3. `confirm_order`\nUse this only after the customer clearly confirms the full final order.\nThis tool places the order in the backend database and sends it to the dashboard/kitchen display.\n4. `handoff_to_human`\nUse this if:\n- customer asks for a human\n- request is too complex\n- customer is frustrated\n- tools fail repeatedly\n- you cannot resolve the order safely\nCONVERSATION FLOW\n1. Greeting\nStart warmly and briefly:\n\"Hi, welcome to Pizza Palazzo. Is this for pickup or delivery?\"\nIf the customer speaks Swedish, respond in Swedish.\nIf the customer speaks English, respond in English.\nIf the customer speaks Arabic, Turkish, Urdu, Kurdish, or Somali, respond in that language if you can.\nOnce the customer’s language is clear, keep using that language for the rest of the call.\n2. Pickup or Delivery\nAsk whether the order is for pickup or delivery.\nIf pickup:\n- do not ask for delivery address\nIf delivery:\n- collect full delivery address\n- confirm the address before placing the order\n3. Taking Items\nFor each requested item:\n- call `validate_item`\n- if valid, confirm the item briefly\n- if invalid or unavailable, explain clearly and offer alternatives from `get_menu`\nExample:\nCustomer: \"I want a BBQ pizza.\"\nYou must call `validate_item` for \"BBQ pizza\".\nIf invalid, say:\n\"I don't see BBQ pizza on the current menu. I can offer you available alternatives.\"\n4. Modifiers\nOnly accept modifiers returned by tools or validated successfully.\nIf customer asks for a modifier not supported by the menu:\n- do not guess\n- explain it is not available\n- offer valid alternatives\n5. Customer Information\nBefore final confirmation, collect:\n- customer name\n- phone number if needed\n- delivery address only for delivery orders\nDo not ask for payment card details.\n6. Summary and Final Confirmation\nRead back:\n- pickup or delivery\n- customer name\n- phone number if collected\n- delivery address if delivery\n- each item\n- quantities\n- modifiers\n- total price from validated/confirmed data\nAsk:\n\"Should I place this order?\"\nDo not call `confirm_order` until the customer clearly says yes.\n7. Confirming Order\nAfter clear confirmation:\n- call `confirm_order`\n- tell the customer the order is placed\n- give the pickup/delivery estimate returned by the tool if available\n- end professionally\nFor pickup:\n\"Your order is confirmed. It will be ready soon. Thank you, and enjoy your pizza.\"\nFor delivery:\n\"Your order is confirmed and will be delivered to the address provided. Thank you, and enjoy your pizza.\"\nSTYLE RULES\nKeep replies short and natural for phone calls.\nUse no more than 1-2 sentences unless reading the final order summary.\nBe warm, efficient, and professional.\nDo not over-apologize.\nDo not explain tool usage to the customer.\nDo not say \"database\", \"backend\", \"tool\", or \"API\" to the customer.\nIf unsure, check with tools instead of guessing.\nSTRICT ANTI-HALLUCINATION RULE\nIf you have not received menu or validation data from a tool, you are not allowed to state that an item exists, is available, has a price, has an ingredient, or can be ordered.\nAlways prefer saying:\n\"Let me check that for you.\"\nThen call the correct tool.\n",
+                "llm": "gpt-4.1-nano",
+                "temperature": 0,
+                "max_tokens": -1,
+                "tool_ids": [
+                    "tool_8501ks51f6smebprzpr5qhbar38w",
+                    "tool_3601ks51f735eyw8gqqas8ky9wcz",
+                    "tool_4401ks51f7crfbra0b3cgqjx4ztz",
+                    "tool_9201ks51f7pjf31bke1c6nsdksrt"
+                ],
+                "built_in_tools": {
+                    "end_call": {
+                        "type": "system",
+                        "name": "end_call",
+                        "description": "",
+                        "response_timeout_secs": 20,
+                        "disable_interruptions": false,
+                        "force_pre_tool_speech": false,
+                        "pre_tool_speech": "auto",
+                        "assignments": [],
+                        "tool_call_sound_behavior": "auto",
+                        "tool_error_handling_mode": "auto",
+                        "params": {
+                            "system_tool_type": "end_call"
+                        }
+                    },
+                    "language_detection": {
+                        "type": "system",
+                        "name": "language_detection",
+                        "description": "",
+                        "response_timeout_secs": 20,
+                        "disable_interruptions": false,
+                        "force_pre_tool_speech": false,
+                        "pre_tool_speech": "auto",
+                        "assignments": [],
+                        "tool_call_sound_behavior": "auto",
+                        "tool_error_handling_mode": "auto",
+                        "params": {
+                            "system_tool_type": "language_detection"
+                        }
+                    },
+                    "update_state": null,
+                    "memory_entry_search": null,
+                    "memory_entry_create": null,
+                    "memory_entry_update": null,
+                    "memory_entry_delete": null,
+                    "agent_prompt_change": null,
+                    "procedure_update": null,
+                    "transfer_to_genesys_chat": null
+                },
+                "enable_parallel_tool_calls": false,
+                "mcp_server_ids": [],
+                "native_mcp_server_ids": [],
+                "knowledge_base": [],
+                "speech_engine": null,
+                "ignore_default_personality": false,
+                "rag": {
+                    "enabled": false,
+                    "embedding_model": "e5_mistral_7b_instruct",
+                    "optional_rag_enabled": false,
+                    "max_vector_distance": 0.6,
+                    "max_documents_length": 50000,
+                    "max_retrieved_rag_chunks_count": 20
+                },
+                "timezone": "Asia/Karachi",
+                "backup_llm_config": {
+                    "preference": "default"
+                },
+                "cascade_timeout_seconds": 8,
+                "tools": [
+                    {
+                        "type": "webhook",
+                        "name": "get_menu",
+                        "description": "Use this before mentioning menu items, prices, ingredients, allergens, sizes, modifiers, drinks, sides, desserts, or availability. Returns the current restaurant menu from Freja's live backend database.",
+                        "response_timeout_secs": 20,
+                        "disable_interruptions": false,
+                        "force_pre_tool_speech": false,
+                        "pre_tool_speech": "auto",
+                        "assignments": [],
+                        "tool_call_sound_behavior": "auto",
+                        "tool_error_handling_mode": "auto",
+                        "dynamic_variables": {
+                            "dynamicVariablePlaceholders": {}
+                        },
+                        "execution_mode": "immediate",
+                        "api_schema": {
+                            "request_headers": {
+                                "Content-Type": "application/json"
+                            },
+                            "url": "https://freja.plenware.cloud/api/elevenlabs/tools/menu",
+                            "method": "GET",
+                            "path_params_schema": {},
+                            "content_type": "application/json"
+                        }
+                    },
+                    {
+                        "type": "webhook",
+                        "name": "validate_item",
+                        "description": "Use this before accepting, adding, or confirming any requested food or drink item. It checks whether the item exists in the live database, whether it is available, whether requested modifiers are valid, and returns calculated price information.",
+                        "response_timeout_secs": 20,
+                        "disable_interruptions": false,
+                        "force_pre_tool_speech": false,
+                        "pre_tool_speech": "auto",
+                        "assignments": [],
+                        "tool_call_sound_behavior": "auto",
+                        "tool_error_handling_mode": "auto",
+                        "dynamic_variables": {
+                            "dynamicVariablePlaceholders": {}
+                        },
+                        "execution_mode": "immediate",
+                        "api_schema": {
+                            "request_headers": {
+                                "Content-Type": "application/json"
+                            },
+                            "url": "https://freja.plenware.cloud/api/elevenlabs/tools/validate-item",
+                            "method": "POST",
+                            "path_params_schema": {},
+                            "request_body_schema": {
+                                "type": "object",
+                                "required": [
+                                    "itemName"
+                                ],
+                                "description": "Requested item validation payload.",
+                                "properties": {
+                                    "item_name": {
+                                        "type": "string",
+                                        "description": "The food or drink item requested by the customer.",
+                                        "is_system_provided": false,
+                                        "dynamic_variable": "",
+                                        "constant_value": ""
+                                    },
+                                    "quantity": {
+                                        "type": "number",
+                                        "description": "The quantity requested by the customer. Use 1 if not specified.",
+                                        "is_system_provided": false,
+                                        "dynamic_variable": "",
+                                        "constant_value": ""
+                                    },
+                                    "modifiers": {
+                                        "type": "object",
+                                        "required": [],
+                                        "description": "Requested size, toppings, sauces, removed ingredients, crust, or other changes.",
+                                        "properties": {}
+                                    }
+                                }
+                            },
+                            "content_type": "application/json"
+                        }
+                    },
+                    {
+                        "type": "webhook",
+                        "name": "confirm_order",
+                        "description": "Use this only after the customer clearly confirms the complete final order. It validates the final order against the live database, saves the order in Freja, and sends it to the restaurant dashboard and kitchen display.",
+                        "response_timeout_secs": 30,
+                        "disable_interruptions": false,
+                        "force_pre_tool_speech": false,
+                        "pre_tool_speech": "auto",
+                        "assignments": [],
+                        "tool_call_sound_behavior": "auto",
+                        "tool_error_handling_mode": "auto",
+                        "dynamic_variables": {
+                            "dynamicVariablePlaceholders": {}
+                        },
+                        "execution_mode": "immediate",
+                        "api_schema": {
+                            "request_headers": {
+                                "Content-Type": "application/json"
+                            },
+                            "url": "https://freja.plenware.cloud/api/elevenlabs/tools/confirm-order",
+                            "method": "POST",
+                            "path_params_schema": {},
+                            "request_body_schema": {
+                                "type": "object",
+                                "required": [
+                                    "order"
+                                ],
+                                "description": "Final order confirmation payload.",
+                                "properties": {
+                                    "order": {
+                                        "type": "object",
+                                        "required": [],
+                                        "description": "Complete order including items, order_type or type, customer name, phone number if available, delivery address if delivery, language, and transcript if available.",
+                                        "properties": {}
+                                    }
+                                }
+                            },
+                            "content_type": "application/json"
+                        }
+                    },
+                    {
+                        "type": "webhook",
+                        "name": "handoff_to_human",
+                        "description": "Use this when the customer asks for a human, becomes frustrated, the request is too complex, or the order cannot be completed safely.",
+                        "response_timeout_secs": 20,
+                        "disable_interruptions": false,
+                        "force_pre_tool_speech": false,
+                        "pre_tool_speech": "auto",
+                        "assignments": [],
+                        "tool_call_sound_behavior": "auto",
+                        "tool_error_handling_mode": "auto",
+                        "dynamic_variables": {
+                            "dynamicVariablePlaceholders": {}
+                        },
+                        "execution_mode": "immediate",
+                        "api_schema": {
+                            "request_headers": {
+                                "Content-Type": "application/json"
+                            },
+                            "url": "https://freja.plenware.cloud/api/elevenlabs/tools/handoff",
+                            "method": "POST",
+                            "path_params_schema": {},
+                            "request_body_schema": {
+                                "type": "object",
+                                "required": [],
+                                "description": "No input is required for handoff.",
+                                "properties": {}
+                            },
+                            "content_type": "application/json"
+                        }
+                    },
+                    {
+                        "type": "system",
+                        "name": "end_call",
+                        "description": "",
+                        "response_timeout_secs": 20,
+                        "disable_interruptions": false,
+                        "force_pre_tool_speech": false,
+                        "pre_tool_speech": "auto",
+                        "assignments": [],
+                        "tool_call_sound_behavior": "auto",
+                        "tool_error_handling_mode": "auto",
+                        "params": {
+                            "system_tool_type": "end_call"
+                        }
+                    },
+                    {
+                        "type": "system",
+                        "name": "language_detection",
+                        "description": "",
+                        "response_timeout_secs": 20,
+                        "disable_interruptions": false,
+                        "force_pre_tool_speech": false,
+                        "pre_tool_speech": "auto",
+                        "assignments": [],
+                        "tool_call_sound_behavior": "auto",
+                        "tool_error_handling_mode": "auto",
+                        "params": {
+                            "system_tool_type": "language_detection"
+                        }
+                    }
+                ]
+            }
+        }
+    },
+    "platform_settings": {
+        "evaluation": {
+            "criteria": [
+                {
+                    "id": "order_accurately_placed",
+                    "name": "Order Accurately Placed",
+                    "type": "prompt",
+                    "conversation_goal_prompt": "Was the customer's order accurately taken and confirmed by the agent, reflecting all requested items and details?",
+                    "use_knowledge_base": false,
+                    "scope": "conversation"
+                },
+                {
+                    "id": "order_type_identified",
+                    "name": "Order Type Identified",
+                    "type": "prompt",
+                    "conversation_goal_prompt": "Did the agent correctly identify whether the order was for pickup or delivery?",
+                    "use_knowledge_base": false,
+                    "scope": "conversation"
+                },
+                {
+                    "id": "handoff_handled_appropriately",
+                    "name": "Handoff Handled Appropriately",
+                    "type": "prompt",
+                    "conversation_goal_prompt": "Did the agent appropriately offer a human handoff when necessary (e.g., unclear request, out-of-menu item, technical issue)?",
+                    "use_knowledge_base": false,
+                    "scope": "conversation"
+                },
+                {
+                    "id": "customer_information_collected",
+                    "name": "Customer Information Collected",
+                    "type": "prompt",
+                    "conversation_goal_prompt": "Did the agent successfully collect all necessary customer information (name, phone, and address for delivery if applicable)?",
+                    "use_knowledge_base": false,
+                    "scope": "conversation"
+                }
+            ]
+        },
+        "widget": {
+            "variant": "full",
+            "placement": "bottom-right",
+            "expandable": "never",
+            "avatar": {
+                "type": "orb",
+                "color1": "#2792dc",
+                "color2": "#9ce6e6"
+            },
+            "feedback_mode": "none",
+            "end_feedback": {
+                "type": "rating"
+            },
+            "bg_color": "#ffffff",
+            "text_color": "#000000",
+            "btn_color": "#000000",
+            "btn_text_color": "#ffffff",
+            "border_color": "#e1e1e1",
+            "focus_color": "#000000",
+            "shareable_page_show_terms": true,
+            "show_avatar_when_collapsed": false,
+            "disable_banner": false,
+            "markdown_link_allowed_hosts": [],
+            "markdown_link_include_www": true,
+            "markdown_link_allow_http": true,
+            "mic_muting_enabled": false,
+            "transcript_enabled": false,
+            "text_input_enabled": true,
+            "conversation_mode_toggle_enabled": false,
+            "default_expanded": false,
+            "always_expanded": false,
+            "dismissible": false,
+            "show_agent_status": false,
+            "show_conversation_id": true,
+            "strip_audio_tags": true,
+            "text_contents": {},
+            "styles": {},
+            "language_selector": false,
+            "supports_text_only": true,
+            "language_presets": {}
+        },
+        "data_collection": {
+            "order_type": {
+                "type": "string",
+                "description": "Whether the order is for 'pickup' or 'delivery'.",
+                "enum": [
+                    "pickup",
+                    "delivery"
+                ],
+                "is_system_provided": false,
+                "dynamic_variable": "",
+                "constant_value": ""
+            },
+            "customer_name": {
+                "type": "string",
+                "description": "The full name of the customer placing the order.",
+                "is_system_provided": false,
+                "dynamic_variable": "",
+                "constant_value": ""
+            },
+            "customer_phone_number": {
+                "type": "string",
+                "description": "The customer's phone number.",
+                "is_system_provided": false,
+                "dynamic_variable": "",
+                "constant_value": ""
+            },
+            "delivery_address": {
+                "type": "string",
+                "description": "The full delivery address, including street, city, state, and zip code. This should be null if the order is for pickup.",
+                "is_system_provided": false,
+                "dynamic_variable": "",
+                "constant_value": ""
+            },
+            "order_items": {
+                "type": "string",
+                "description": "A detailed list of all items ordered, including pizzas (with size, crust, toppings), sides, and drinks. Format as a structured text description of the items.",
+                "is_system_provided": false,
+                "dynamic_variable": "",
+                "constant_value": ""
+            },
+            "total_price": {
+                "type": "string",
+                "description": "The final total price of the order, including tax, formatted as a currency string (e.g., '$25.99').",
+                "is_system_provided": false,
+                "dynamic_variable": "",
+                "constant_value": ""
+            }
+        },
+        "data_collection_scopes": {},
+        "overrides": {
+            "conversation_config_override": {
+                "asr": {
+                    "keywords": false
+                },
+                "turn": {
+                    "soft_timeout_config": {
+                        "message": false
+                    }
+                },
+                "tts": {
+                    "voice_id": false,
+                    "stability": false,
+                    "speed": false,
+                    "similarity_boost": false
+                },
+                "conversation": {
+                    "text_only": true
+                },
+                "agent": {
+                    "first_message": false,
+                    "language": true,
+                    "max_conversation_duration_message": false,
+                    "prompt": {
+                        "prompt": false,
+                        "llm": false,
+                        "tool_ids": false,
+                        "native_mcp_server_ids": false,
+                        "knowledge_base": false
+                    }
+                }
+            },
+            "custom_llm_extra_body": false,
+            "enable_conversation_initiation_client_data_from_webhook": false,
+            "enable_starting_workflow_node_id_from_client": false
+        },
+        "workspace_overrides": {
+            "webhooks": {
+                "events": [
+                    "transcript"
+                ],
+                "transcript_format": "json",
+                "send_audio": false
+            }
+        },
+        "testing": {
+            "attached_tests": [],
+            "referenced_tests_ids": []
+        },
+        "archived": false,
+        "guardrails": {
+            "version": "1",
+            "focus": {
+                "is_enabled": false
+            },
+            "prompt_injection": {
+                "is_enabled": false
+            },
+            "content": {
+                "execution_mode": "streaming",
+                "config": {
+                    "sexual": {
+                        "is_enabled": false,
+                        "threshold": "medium"
+                    },
+                    "violence": {
+                        "is_enabled": false,
+                        "threshold": "medium"
+                    },
+                    "harassment": {
+                        "is_enabled": false,
+                        "threshold": "medium"
+                    },
+                    "self_harm": {
+                        "is_enabled": false,
+                        "threshold": "medium"
+                    },
+                    "profanity": {
+                        "is_enabled": false,
+                        "threshold": "medium"
+                    },
+                    "religion_or_politics": {
+                        "is_enabled": false,
+                        "threshold": "medium"
+                    },
+                    "medical_and_legal_information": {
+                        "is_enabled": false,
+                        "threshold": "medium"
+                    }
+                },
+                "trigger_action": {
+                    "type": "end_call"
+                }
+            },
+            "moderation": null,
+            "custom": {
+                "config": {
+                    "configs": []
+                }
+            }
+        },
+        "auth": {
+            "enable_auth": false,
+            "allowlist": [],
+            "require_origin_header": false
+        },
+        "call_limits": {
+            "agent_concurrency_limit": -1,
+            "daily_limit": 100000,
+            "bursting_enabled": true
+        },
+        "ban": null,
+        "smb_metadata": null,
+        "privacy": {
+            "record_voice": true,
+            "retention_days": -1,
+            "delete_transcript_and_pii": false,
+            "delete_audio": false,
+            "apply_to_existing_conversations": false,
+            "zero_retention_mode": false,
+            "conversation_history_redaction": {
+                "enabled": false,
+                "entities": []
+            }
+        },
+        "trust_context": "low",
+        "analysis_llm": "gemini-2.5-flash",
+        "safety": {
+            "is_blocked_ivc": false,
+            "is_blocked_non_ivc": false,
+            "ignore_safety_evaluation": false
+        }
+    },
+    "tags": [],
+    "workflow": {
+        "edges": {},
+        "nodes": {
+            "start_node": {
+                "type": "start",
+                "position": {
+                    "x": 0,
+                    "y": 0
+                },
+                "edge_order": []
+            }
+        },
+        "prevent_subagent_loops": false
+    }
+}

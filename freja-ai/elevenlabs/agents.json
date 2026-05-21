@@ -1,0 +1,10 @@
+{
+    "agents": [
+        {
+            "config": "agent_configs/Freja.json",
+            "id": "agent_4201krxdkbgvf8vamjt6gkwbe5fe",
+            "version_id": "agtvrsn_8201ks51mvj6ec4bzan5pxk032hf",
+            "branch_id": "agtbrch_8101krxdke3efx7bjwff0kfy6rwz"
+        }
+    ]
+}

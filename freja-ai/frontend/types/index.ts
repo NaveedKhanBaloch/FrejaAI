@@ -39,6 +39,9 @@ export interface MenuItem {
   name: string;
   category: string;
   base_price: number;
+  price?: string;
+  size_prices?: Record<string, string>;
+  ingredients?: string[];
   description: string | null;
   is_available: boolean;
   allergens: string[];

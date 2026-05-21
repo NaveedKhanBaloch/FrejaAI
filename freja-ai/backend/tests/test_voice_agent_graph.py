@@ -7,11 +7,30 @@ import pytest
 from app.ai.voice_agent_graph import VoiceAgentGraph
 
 
+class FakeStream:
+    def __init__(self, parts: list[str]) -> None:
+        self._parts = parts
+        self._index = 0
+
+    def __aiter__(self) -> "FakeStream":
+        return self
+
+    async def __anext__(self) -> Any:
+        if self._index >= len(self._parts):
+            raise StopAsyncIteration
+        part = self._parts[self._index]
+        self._index += 1
+        return SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content=part))])
+
+
 class FakeCompletions:
-    async def create(self, **_: Any) -> Any:
+    async def create(self, **kwargs: Any) -> Any:
+        assistant_text = "Pickup is noted. Would you like a medium Kebabpizza?"
+        if kwargs.get("stream"):
+            return FakeStream(["Pickup is noted. ", "Would you like a medium Kebabpizza?"])
         content = json.dumps(
             {
-                "assistant_text": "Pickup is noted. Would you like a medium Kebabpizza?",
+                "assistant_text": assistant_text,
                 "order_complete": False,
                 "call_ended": False,
                 "order": {"items": [], "order_type": "pickup", "delivery_address": None, "total_amount": 0},

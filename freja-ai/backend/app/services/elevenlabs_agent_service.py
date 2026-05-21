@@ -1,0 +1,277 @@
+import json
+from datetime import datetime, timezone
+from typing import Any
+
+import httpx
+from rapidfuzz import fuzz, process
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.ai.order_builder import MenuValidationError, OrderBuilder
+from app.ai.prompts.system_prompt import build_system_prompt
+from app.config import get_settings
+from app.models.call_log import CallLog
+from app.models.menu import MenuItem
+from app.models.order import Order
+from app.models.restaurant import Restaurant
+from app.services.demo_menu import DEMO_MENU
+from app.services.restaurant_seed import ensure_demo_restaurant
+
+
+class ElevenLabsAgentService:
+    def __init__(self) -> None:
+        self._settings = get_settings()
+
+    async def get_signed_url(self) -> str:
+        if not self._settings.elevenlabs_agent_id:
+            raise ValueError("ELEVENLABS_AGENT_ID is not configured")
+        url = "https://api.elevenlabs.io/v1/convai/conversation/get-signed-url"
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.get(
+                url,
+                params={"agent_id": self._settings.elevenlabs_agent_id},
+                headers={"xi-api-key": self._settings.elevenlabs_api_key},
+            )
+        response.raise_for_status()
+        payload = response.json()
+        signed_url = payload.get("signed_url")
+        if not isinstance(signed_url, str) or not signed_url:
+            raise ValueError("ElevenLabs did not return a signed_url")
+        return signed_url
+
+    async def get_conversation_token(self) -> str:
+        if not self._settings.elevenlabs_agent_id:
+            raise ValueError("ELEVENLABS_AGENT_ID is not configured")
+        url = "https://api.elevenlabs.io/v1/convai/conversation/token"
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.get(
+                url,
+                params={"agent_id": self._settings.elevenlabs_agent_id},
+                headers={"xi-api-key": self._settings.elevenlabs_api_key},
+            )
+        response.raise_for_status()
+        payload = response.json()
+        token = payload.get("token")
+        if not isinstance(token, str) or not token:
+            raise ValueError("ElevenLabs did not return a conversation token")
+        return token
+
+    def agent_id(self) -> str:
+        if not self._settings.elevenlabs_agent_id:
+            raise ValueError("ELEVENLABS_AGENT_ID is not configured")
+        return self._settings.elevenlabs_agent_id
+
+    async def demo_prompt(self, session: AsyncSession | None = None) -> str:
+        menu = await self.get_menu_items(session) if session is not None else DEMO_MENU
+        base_prompt = build_system_prompt(
+            self._settings.demo_restaurant_name,
+            menu,
+            "sv",
+            {"items": [], "order_type": None, "delivery_address": None, "total_amount": 0},
+            datetime.now(timezone.utc),
+        )
+        return (
+            base_prompt
+            + "\n\nVOICE AGENT TOOL RULES:\n"
+            + "Use the configured tools as the source of truth. Do not guess prices or availability.\n"
+            + "Call get_menu before listing available menu items if you are unsure.\n"
+            + "Call validate_item before confirming an item or modifier.\n"
+            + "Call confirm_order only after the customer clearly approves the final summary.\n"
+            + "For pickup orders, never ask for a delivery address.\n"
+            + "For delivery orders, collect the delivery address before confirmation.\n"
+            + "When the order is confirmed, tell the customer professionally that the order is placed and they should enjoy the pizza, then end the call.\n"
+        )
+
+    async def get_restaurant(self, session: AsyncSession) -> Restaurant:
+        result = await session.execute(select(Restaurant).where(Restaurant.name == self._settings.demo_restaurant_name, Restaurant.is_active.is_(True)))
+        restaurant = result.scalar_one_or_none()
+        return restaurant or await ensure_demo_restaurant(session)
+
+    async def get_menu_items(self, session: AsyncSession, include_unavailable: bool = False) -> list[dict[str, Any]]:
+        restaurant = await self.get_restaurant(session)
+        filters = [MenuItem.restaurant_id == restaurant.id]
+        if not include_unavailable:
+            filters.append(MenuItem.is_available.is_(True))
+        result = await session.execute(
+            select(MenuItem)
+            .where(*filters)
+            .order_by(MenuItem.category, MenuItem.sort_order, MenuItem.name)
+        )
+        items = list(result.scalars())
+        return [
+            {
+                "id": item.id,
+                "name": item.name,
+                "category": item.category,
+                "base_price": item.base_price,
+                "description": item.description,
+                "is_available": item.is_available,
+                "allergens": item.allergens,
+                "modifiers": item.modifiers,
+                "sort_order": item.sort_order,
+            }
+            for item in items
+        ]
+
+    async def get_menu(self, session: AsyncSession) -> dict[str, Any]:
+        restaurant = await self.get_restaurant(session)
+        menu = await self.get_menu_items(session)
+        return {"restaurant_name": restaurant.name, "menu": [self._serialize_menu_item(item) for item in menu]}
+
+    async def validate_item(self, session: AsyncSession, item_name: str, quantity: int = 1, modifiers: dict[str, Any] | None = None) -> dict[str, Any]:
+        all_items = await self.get_menu_items(session, include_unavailable=True)
+        known_item = self._find_known_item(item_name, all_items)
+        if known_item is not None and not bool(known_item.get("is_available", True)):
+            raise MenuValidationError(f"{known_item['name']} is currently unavailable.")
+        builder = OrderBuilder([item for item in all_items if item.get("is_available", True)])
+        item = builder.add_item(item_name, quantity, self._normalize_modifiers(modifiers or {}))
+        return {
+            "valid": True,
+            "item": {
+                "name": item.name,
+                "quantity": item.quantity,
+                "unit_price": item.unit_price,
+                "total_price": item.total_price,
+                "modifiers": item.modifiers,
+                "allergens": item.allergens,
+            },
+            "message": f"{item.quantity} x {item.name} is available.",
+        }
+
+    async def confirm_order(self, session: AsyncSession, order: dict[str, Any]) -> dict[str, Any]:
+        restaurant = await self.get_restaurant(session)
+        order_type = str(order.get("type") or order.get("order_type") or "").lower()
+        if order_type not in {"pickup", "delivery", "avhämtning", "leverans"}:
+            raise MenuValidationError("Order type must be pickup or delivery")
+        normalized_type = "delivery" if order_type in {"delivery", "leverans"} else "pickup"
+        address = order.get("address") or order.get("delivery_address")
+        if normalized_type == "delivery" and not address:
+            raise MenuValidationError("Delivery address is required for delivery orders")
+
+        items = order.get("items")
+        if not isinstance(items, list) or not items:
+            raise MenuValidationError("Order must include at least one item")
+
+        built_items: list[dict[str, Any]] = []
+        total_amount = 0
+        for raw_item in items:
+            name, quantity, modifiers = self._extract_item(raw_item)
+            built = (await self.validate_item(session, name, quantity, modifiers))["item"]
+            built_items.append(built)
+            total_amount += int(built["total_price"])
+
+        call_log = CallLog(
+            restaurant_id=restaurant.id,
+            call_uuid=f"elevenlabs-{datetime.now(timezone.utc).timestamp()}",
+            customer_phone=str(order.get("customer_phone") or "unknown"),
+            duration_seconds=int(order.get("duration_seconds") or 0),
+            transcript=str(order.get("transcript") or "Order confirmed by ElevenLabs voice agent."),
+            recording_url=order.get("recording_url") if isinstance(order.get("recording_url"), str) else None,
+            detected_language=str(order.get("language") or order.get("detected_language") or "sv"),
+            ai_confidence_avg=float(order.get("confidence") or 0.92),
+            outcome="ordered",
+        )
+        session.add(call_log)
+        await session.flush()
+
+        saved_order = Order(
+            restaurant_id=restaurant.id,
+            call_log_id=call_log.id,
+            customer_phone=str(order.get("customer_phone") or "unknown"),
+            items=built_items,
+            total_amount=total_amount,
+            order_type=normalized_type,
+            delivery_address=str(address) if normalized_type == "delivery" else None,
+            status="confirmed",
+            confirmed_at=datetime.now(timezone.utc),
+        )
+        session.add(saved_order)
+        await session.commit()
+        await session.refresh(saved_order)
+
+        ticket = {
+            "id": f"#{str(saved_order.id)[:4].upper()}",
+            "order_id": str(saved_order.id),
+            "type": normalized_type.upper(),
+            "items": built_items,
+            "address": str(address) if normalized_type == "delivery" else None,
+            "eta": "25-35 min" if normalized_type == "delivery" else "15-20 min",
+            "total": self._format_kr(total_amount),
+        }
+        return {
+            "confirmed": True,
+            "ticket": ticket,
+            "message": f"Order confirmed. Total {ticket['total']}.",
+        }
+
+    def _serialize_menu_item(self, item: dict[str, Any]) -> dict[str, Any]:
+        modifiers = dict(item.get("modifiers") or {})
+        sizes = modifiers.get("sizes") if isinstance(modifiers.get("sizes"), dict) else {}
+        size_prices = {
+            str(size): self._format_kr(int(item["base_price"]) + int(delta))
+            for size, delta in sizes.items()
+        }
+        return {
+            **item,
+            "id": str(item["id"]),
+            "price": self._format_kr(int(item["base_price"])),
+            "base_price_ore": item["base_price"],
+            "ingredients": self._ingredients_from_description(str(item.get("description") or "")),
+            "size_prices": size_prices or {"standard": self._format_kr(int(item["base_price"]))},
+        }
+
+    def _ingredients_from_description(self, description: str) -> list[str]:
+        cleaned = (
+            description.replace("Tomatsås,", "")
+            .replace("tomatsås,", "")
+            .replace("Tomatsås", "")
+            .replace("tomatsås", "")
+            .replace(".", "")
+        )
+        return [part.strip() for part in cleaned.split(",") if part.strip()]
+
+    def _find_known_item(self, requested_name: str, menu_items: list[dict[str, Any]]) -> dict[str, Any] | None:
+        choices: dict[str, dict[str, Any]] = {}
+        for item in menu_items:
+            name = str(item["name"]).casefold()
+            choices[name] = item
+            choices[name.replace("gher", "gar")] = item
+            choices[name.replace("gh", "g")] = item
+        match = process.extractOne(requested_name.casefold(), choices.keys(), scorer=fuzz.WRatio, score_cutoff=85)
+        return choices[match[0]] if match else None
+
+    def _extract_item(self, item: Any) -> tuple[str, int, dict[str, Any]]:
+        if isinstance(item, str):
+            return item, 1, {}
+        if not isinstance(item, dict):
+            raise MenuValidationError("Invalid order item")
+        name = str(item.get("name") or item.get("id") or "")
+        quantity = int(item.get("quantity") or 1)
+        modifiers = self._normalize_modifiers(dict(item.get("modifiers") or {}))
+        if item.get("size"):
+            modifiers["size"] = str(item["size"]).lower()
+        toppings = item.get("toppings")
+        if isinstance(toppings, list):
+            modifiers["add_toppings"] = [str(topping).lower() for topping in toppings]
+        return name, quantity, modifiers
+
+    def _normalize_modifiers(self, modifiers: dict[str, Any]) -> dict[str, Any]:
+        normalized = dict(modifiers)
+        if isinstance(normalized.get("modifiers"), list):
+            values = [str(value).lower() for value in normalized.pop("modifiers")]
+            if "extra cheese" in values:
+                normalized["add_toppings"] = [*normalized.get("add_toppings", []), "extra cheese"]
+            if "no onion" in values:
+                normalized["remove_toppings"] = [*normalized.get("remove_toppings", []), "no onion"]
+        for key in ("add_toppings", "remove_toppings"):
+            if isinstance(normalized.get(key), list):
+                normalized[key] = [str(value).lower() for value in normalized[key]]
+        if isinstance(normalized.get("size"), str):
+            normalized["size"] = normalized["size"].lower()
+        return normalized
+
+    def _format_kr(self, amount_ore: int) -> str:
+        return f"kr {amount_ore // 100}" if amount_ore % 100 == 0 else f"kr {amount_ore / 100:.2f}"
+
+    def tool_result(self, payload: dict[str, Any]) -> str:
+        return json.dumps(payload, ensure_ascii=False)

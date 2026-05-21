@@ -16,8 +16,9 @@ export interface DemoOrderItem {
   quantity?: number;
   size?: string;
   toppings?: string[];
-  modifiers?: string[];
+  modifiers?: string[] | Record<string, unknown>;
   notes?: string;
+  total_price?: number;
 }
 
 export interface DemoOrderTicket {

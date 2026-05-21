@@ -1,4 +1,4 @@
-import { painCards } from "@/lib/demo-data";
+import { painCards } from "@/lib/marketing-data";
 import { RevealOnScroll } from "../ui/RevealOnScroll";
 
 export function PainPoints() {
