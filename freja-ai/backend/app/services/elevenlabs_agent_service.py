@@ -91,6 +91,7 @@ class ElevenLabsAgentService:
             + "If delivery is known, move directly to item details or delivery address, whichever is still missing.\n"
             + "For pickup orders, never ask for a delivery address.\n"
             + "For delivery orders, collect the delivery address before confirmation.\n"
+            + "When calling confirm_order, include the known order_type. Never ask pickup/delivery again just to fill a tool field.\n"
             + "When the order is confirmed, tell the customer professionally that the order is placed and they should enjoy the pizza, then end the call.\n"
         )
 
@@ -148,7 +149,7 @@ class ElevenLabsAgentService:
 
     async def confirm_order(self, session: AsyncSession, order: dict[str, Any]) -> dict[str, Any]:
         restaurant = await self.get_restaurant(session)
-        order_type = str(order.get("type") or order.get("order_type") or "").lower()
+        order_type = self._resolve_order_type(order)
         if order_type not in {"pickup", "delivery", "avhämtning", "leverans"}:
             raise MenuValidationError("Order type must be pickup or delivery")
         normalized_type = "delivery" if order_type in {"delivery", "leverans"} else "pickup"
@@ -337,6 +338,47 @@ class ElevenLabsAgentService:
         if isinstance(toppings, list):
             modifiers["add_toppings"] = [str(topping).lower() for topping in toppings]
         return name, quantity, self._normalize_modifiers(modifiers)
+
+    def _resolve_order_type(self, order: dict[str, Any]) -> str:
+        direct_value = (
+            order.get("type")
+            or order.get("order_type")
+            or order.get("orderType")
+            or order.get("fulfillment")
+            or order.get("fulfilment")
+            or order.get("service_type")
+            or order.get("pickup_or_delivery")
+        )
+        normalized = self._normalize_order_type(direct_value)
+        if normalized:
+            return normalized
+        address = order.get("address") or order.get("delivery_address") or order.get("deliveryAddress")
+        if isinstance(address, str) and address.strip():
+            return "delivery"
+        text_value = self._flatten_order_text(order)
+        normalized_from_text = self._normalize_order_type(text_value)
+        if normalized_from_text:
+            return normalized_from_text
+        return "pickup"
+
+    def _normalize_order_type(self, value: Any) -> str | None:
+        if value is None:
+            return None
+        text = str(value).casefold()
+        if any(word in text for word in ("leverans", "delivery", "deliver", "home delivery")):
+            return "delivery"
+        if any(word in text for word in ("avhämtning", "avhamtning", "pickup", "pick up", "takeaway", "take away", "collect")):
+            return "pickup"
+        return None
+
+    def _flatten_order_text(self, value: Any) -> str:
+        if isinstance(value, dict):
+            return " ".join(self._flatten_order_text(item) for item in value.values())
+        if isinstance(value, list):
+            return " ".join(self._flatten_order_text(item) for item in value)
+        if isinstance(value, str):
+            return value
+        return ""
 
     def _normalize_modifiers(self, modifiers: dict[str, Any], menu_item: dict[str, Any] | None = None) -> dict[str, Any]:
         normalized = dict(modifiers)

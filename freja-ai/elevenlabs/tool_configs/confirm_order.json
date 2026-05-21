@@ -1,6 +1,6 @@
 {
     "name": "confirm_order",
-    "description": "Use this only after the customer clearly confirms the complete final order. It validates the final order against the live database, saves the order in Freja, and sends it to the restaurant dashboard and kitchen display. Speak only the formatted total and item price labels returned by this tool.",
+    "description": "Use this only after the customer clearly confirms the complete final order. The order_type field is required and must be the locked value already given by the customer: pickup or delivery. Do not ask pickup/delivery again if the customer already answered. It validates the final order against the live database, saves the order in Freja, and sends it to the restaurant dashboard and kitchen display. Speak only the formatted total and item price labels returned by this tool.",
     "type": "webhook",
     "api_schema": {
         "url": "https://api.freja.plenware.cloud/elevenlabs/tools/confirm-order",
@@ -14,7 +14,66 @@
             "properties": {
                 "order": {
                     "type": "object",
-                    "description": "Complete order including items, order_type or type, customer name, phone number if available, delivery address if delivery, language, and transcript if available."
+                    "description": "Complete final order. Include the locked order_type already given by the customer. For pickup, set order_type to pickup and do not include a delivery address. For delivery, set order_type to delivery and include delivery_address.",
+                    "required": [
+                        "orderType",
+                        "items"
+                    ],
+                    "properties": {
+                        "items": {
+                            "type": "array",
+                            "description": "Confirmed order items with name, quantity, size, and modifiers.",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "name": {
+                                        "type": "string",
+                                        "description": "Menu item name."
+                                    },
+                                    "quantity": {
+                                        "type": "number",
+                                        "description": "Quantity."
+                                    },
+                                    "size": {
+                                        "type": "string",
+                                        "description": "Size if requested, for example standard, medium, family, familj, or large."
+                                    },
+                                    "modifiers": {
+                                        "type": "object",
+                                        "description": "Toppings, sauces, crust, removed ingredients, or other confirmed changes."
+                                    }
+                                }
+                            }
+                        },
+                        "customer_name": {
+                            "type": "string",
+                            "description": "Customer name if collected."
+                        },
+                        "customer_phone": {
+                            "type": "string",
+                            "description": "Customer phone if collected."
+                        },
+                        "delivery_address": {
+                            "type": "string",
+                            "description": "Delivery address. Required only for delivery. Leave empty for pickup."
+                        },
+                        "language": {
+                            "type": "string",
+                            "description": "Conversation language if known."
+                        },
+                        "transcript": {
+                            "type": "string",
+                            "description": "Short final transcript or summary."
+                        },
+                        "orderType": {
+                            "type": "string",
+                            "enum": [
+                                "pickup",
+                                "delivery"
+                            ],
+                            "description": "Required. Use the pickup/delivery answer the customer already gave earlier. Never ask again just to fill this field."
+                        }
+                    }
                 }
             }
         },

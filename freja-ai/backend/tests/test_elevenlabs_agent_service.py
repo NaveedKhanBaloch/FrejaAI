@@ -40,6 +40,16 @@ def test_menu_serialization_exposes_formatted_size_prices_only() -> None:
     assert "base_price" not in serialized
 
 
+def test_order_type_resolution_uses_known_conversation_values() -> None:
+    service = ElevenLabsAgentService()
+
+    assert service._resolve_order_type({"order_type": "pickup"}) == "pickup"
+    assert service._resolve_order_type({"type": "leverans"}) == "delivery"
+    assert service._resolve_order_type({"delivery_address": "Drottninggatan 42"}) == "delivery"
+    assert service._resolve_order_type({"summary": "The customer said it is for pickup."}) == "pickup"
+    assert service._resolve_order_type({"items": [{"name": "Vesuvio"}]}) == "pickup"
+
+
 @pytest.mark.asyncio
 async def test_validate_item_uses_requested_size_price(monkeypatch: pytest.MonkeyPatch) -> None:
     service = ElevenLabsAgentService()
