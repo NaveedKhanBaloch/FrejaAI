@@ -13,8 +13,15 @@ def _running_in_container() -> bool:
 
 
 def _localize_container_hostname(value: object, service: str) -> object:
-    if _running_in_container() or not isinstance(value, str):
+    if not isinstance(value, str):
         return value
+    if _running_in_container():
+        return (
+            value.replace("@localhost:", f"@{service}:")
+            .replace("//localhost:", f"//{service}:")
+            .replace("@127.0.0.1:", f"@{service}:")
+            .replace("//127.0.0.1:", f"//{service}:")
+        )
     return value.replace(f"@{service}:", "@localhost:").replace(f"//{service}:", "//localhost:")
 
 
