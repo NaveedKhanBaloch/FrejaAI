@@ -28,6 +28,7 @@ export interface DemoOrderTicket {
   address: string | null;
   eta: string;
   total: string;
+  time?: string;
 }
 
 export interface VoiceScriptStep {

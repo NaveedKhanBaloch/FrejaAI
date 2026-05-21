@@ -18,6 +18,7 @@ interface DashboardOrderItem {
 interface DashboardOrder {
   id: string;
   display_id: string;
+  time: string;
   type: string;
   items: DashboardOrderItem[];
   total: string;
@@ -61,6 +62,7 @@ function orderToTicket(order: DashboardOrder): DemoOrderTicket {
     address: order.delivery_address,
     eta: order.type === "DELIVERY" ? "25-35 min" : "15-20 min",
     total: order.total,
+    time: order.time,
   };
 }
 
@@ -114,7 +116,7 @@ export function KitchenDisplay() {
       </div>
       {!ticketReady ? (
         <div className="flex h-[520px] items-center justify-center border border-dashed border-border text-center text-text-2">
-          Complete the voice demo and the ticket appears here.
+          {callStartedAt ? "Waiting for the confirmed database order. The ticket appears here when Freja places it." : "Complete the voice demo and the ticket appears here."}
         </div>
       ) : (
         <article className="ticket-enter border border-accent bg-bg">
@@ -122,7 +124,7 @@ export function KitchenDisplay() {
             <span>ORDER {orderTicket?.id ?? "#0042"}</span>
             <span className="text-accent">{orderTicket?.type ?? "DELIVERY"}</span>
           </div>
-          <div className="border-b border-border p-5 font-mono text-sm text-text-2">14:32 + {seconds}s</div>
+          <div className="border-b border-border p-5 font-mono text-sm text-text-2">{orderTicket?.time ?? "Now"} + {seconds}s</div>
           <div className="space-y-2 border-b border-border p-5">
             {ticketItems.map((item, index) => (
               <p key={`${index}-${formatOrderItem(item)}`} className={index === 0 ? "font-bold" : index === 2 ? "text-accent" : "text-text-2"}>
