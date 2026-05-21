@@ -1,6 +1,6 @@
 {
     "name": "confirm_order",
-    "description": "Use this only after the customer clearly confirms the complete final order. The order_type field is required and must be the locked value already given by the customer: pickup or delivery. Do not ask pickup/delivery again if the customer already answered. It validates the final order against the live database, saves the order in Freja, and sends it to the restaurant dashboard and kitchen display. Speak only the formatted total and item price labels returned by this tool.",
+    "description": "Use this only after the customer clearly confirms the complete final order. Customer name, phone, and items are required. Include orderType as pickup or delivery if known, but do not ask pickup/delivery again if the customer already answered. If orderType is omitted, Freja backend will infer it. It saves the order in Freja and sends it to the restaurant dashboard and kitchen display.",
     "type": "webhook",
     "api_schema": {
         "url": "https://api.freja.plenware.cloud/elevenlabs/tools/confirm-order",
@@ -14,9 +14,8 @@
             "properties": {
                 "order": {
                     "type": "object",
-                    "description": "Complete final order. Include the locked order_type already given by the customer. For pickup, set order_type to pickup and do not include a delivery address. For delivery, set order_type to delivery and include delivery_address.",
+                    "description": "Complete final order. Include orderType if available, but do not ask the customer again just to fill it. For pickup, delivery_address should be empty. For delivery, include delivery_address.",
                     "required": [
-                        "orderType",
                         "items",
                         "customerName",
                         "customerPhone"
@@ -77,7 +76,7 @@
                                 "pickup",
                                 "delivery"
                             ],
-                            "description": "Required. Use the pickup/delivery answer the customer already gave earlier. Never ask again just to fill this field."
+                            "description": "Optional but preferred. Use pickup or delivery if already known. Do not ask again just to fill this field."
                         },
                         "clientOrderId": {
                             "type": "string",
