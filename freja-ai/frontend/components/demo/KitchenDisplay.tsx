@@ -1,7 +1,29 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { DemoOrderItem, useVoiceStore } from "@/lib/voice-simulator";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/lib/api";
+import { DemoOrderItem, DemoOrderTicket, useVoiceStore } from "@/lib/voice-simulator";
+
+interface DashboardOrderItem {
+  name?: string;
+  quantity?: number;
+  size?: string;
+  modifiers?: string[] | Record<string, unknown>;
+  toppings?: string[];
+  notes?: string;
+  total_price?: number;
+}
+
+interface DashboardOrder {
+  id: string;
+  display_id: string;
+  type: string;
+  items: DashboardOrderItem[];
+  total: string;
+  delivery_address: string | null;
+  created_at: string;
+}
 
 function formatOrderItem(item: string | DemoOrderItem): string {
   if (typeof item === "string") return item;
@@ -23,13 +45,53 @@ function formatOrderItem(item: string | DemoOrderItem): string {
   return `${quantity}× ${size}${name}${suffix}`;
 }
 
+function orderToTicket(order: DashboardOrder): DemoOrderTicket {
+  return {
+    id: order.display_id,
+    type: order.type,
+    items: order.items.map((item) => ({
+      name: item.name,
+      quantity: item.quantity,
+      size: item.size,
+      toppings: item.toppings,
+      modifiers: item.modifiers,
+      notes: item.notes,
+      total_price: item.total_price,
+    })),
+    address: order.delivery_address,
+    eta: order.type === "DELIVERY" ? "25-35 min" : "15-20 min",
+    total: order.total,
+  };
+}
+
 export function KitchenDisplay() {
   const ticketReady = useVoiceStore((state) => state.ticketReady);
   const address = useVoiceStore((state) => state.address);
   const orderTicket = useVoiceStore((state) => state.orderTicket);
+  const callStartedAt = useVoiceStore((state) => state.callStartedAt);
+  const completeOrder = useVoiceStore((state) => state.completeOrder);
   const [ready, setReady] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const ticketItems = orderTicket?.items ?? ["1× LARGE HALF-AND-HALF", "½ Margherita / ½ Vesuvio", "+ Extra cheese (whole)"];
+
+  const { data: latestOrders = [] } = useQuery({
+    queryKey: ["landing-latest-confirmed-orders"],
+    queryFn: () => api<DashboardOrder[]>("/dashboard/orders"),
+    enabled: Boolean(callStartedAt) && !ticketReady,
+    refetchInterval: 2500,
+    retry: 1,
+  });
+
+  useEffect(() => {
+    if (!callStartedAt || ticketReady || latestOrders.length === 0) return;
+    const confirmedDuringThisCall = latestOrders.find((order) => {
+      const createdAt = new Date(order.created_at).getTime();
+      return Number.isFinite(createdAt) && createdAt >= callStartedAt - 5000;
+    });
+    if (confirmedDuringThisCall) {
+      completeOrder(orderToTicket(confirmedDuringThisCall));
+    }
+  }, [callStartedAt, completeOrder, latestOrders, ticketReady]);
 
   useEffect(() => {
     if (!ticketReady) return;

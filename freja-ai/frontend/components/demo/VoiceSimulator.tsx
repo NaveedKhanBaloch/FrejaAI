@@ -35,7 +35,7 @@ function isLocalBrowserOrigin() {
 }
 
 export function VoiceSimulator() {
-  const { lines, reset, addLine, completeOrder } = useVoiceStore();
+  const { lines, reset, addLine, completeOrder, markCallStarted } = useVoiceStore();
   const ticketReady = useVoiceStore((state) => state.ticketReady);
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -149,6 +149,7 @@ export function VoiceSimulator() {
     setConversationId(null);
     setStatusMessage("Starting ElevenLabs session...");
     reset();
+    markCallStarted();
     try {
       clientOrderIdRef.current = `voice-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
       if (!window.isSecureContext && !isLocalBrowserOrigin()) {

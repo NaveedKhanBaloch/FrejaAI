@@ -72,11 +72,13 @@ interface VoiceStore {
   address: string;
   ticketReady: boolean;
   orderTicket: DemoOrderTicket | null;
+  callStartedAt: number | null;
   begin: () => void;
   choose: (text: string) => void;
   advanceAfterFreja: () => void;
   submitAddress: (address: string) => void;
   addLine: (line: ConversationLine) => void;
+  markCallStarted: () => void;
   completeOrder: (order: DemoOrderTicket) => void;
   replayEnglish: () => void;
   reset: () => void;
@@ -93,9 +95,10 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
   address: "Drottninggatan 42, Stockholm",
   ticketReady: false,
   orderTicket: null,
+  callStartedAt: null,
   begin: () => {
     const step = scriptFor(get().language)[1];
-    set({ step: 1, lines: [{ speaker: "Freja", text: step.freja ?? "" }], ticketReady: false, orderTicket: null });
+    set({ step: 1, lines: [{ speaker: "Freja", text: step.freja ?? "" }], ticketReady: false, orderTicket: null, callStartedAt: Date.now() });
   },
   choose: (text) => {
     const current = get();
@@ -156,6 +159,7 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
     });
   },
   addLine: (line) => set((state) => ({ lines: [...state.lines, line] })),
+  markCallStarted: () => set({ callStartedAt: Date.now(), ticketReady: false, orderTicket: null }),
   completeOrder: (order) =>
     set({
       step: 10,
@@ -163,6 +167,6 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
       orderTicket: order,
       address: order.address ?? "Pickup counter",
     }),
-  replayEnglish: () => set({ step: 0, language: "en", lines: [], ticketReady: false, orderTicket: null, address: "Drottninggatan 42, Stockholm" }),
-  reset: () => set({ step: 0, language: "sv", lines: [], ticketReady: false, orderTicket: null, address: "Drottninggatan 42, Stockholm" }),
+  replayEnglish: () => set({ step: 0, language: "en", lines: [], ticketReady: false, orderTicket: null, callStartedAt: null, address: "Drottninggatan 42, Stockholm" }),
+  reset: () => set({ step: 0, language: "sv", lines: [], ticketReady: false, orderTicket: null, callStartedAt: null, address: "Drottninggatan 42, Stockholm" }),
 }));
