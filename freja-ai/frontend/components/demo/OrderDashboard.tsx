@@ -36,6 +36,8 @@ interface OverviewResponse {
     total_orders: number;
     conversion_rate: number;
     revenue: number;
+    revenue_order_count: number;
+    avg_order_value: number;
     missed_calls: number;
     active_orders: number;
   };
@@ -96,10 +98,10 @@ function Overview() {
       {isError && <div className="border border-danger bg-danger/10 p-5 text-sm text-danger">{error instanceof Error ? error.message : "Dashboard database request failed"}</div>}
       <div className="grid gap-4 md:grid-cols-4">
         {[
-          ["Calls today", String(metrics?.total_calls ?? 0), `${metrics?.missed_calls ?? 0} missed calls`],
-          ["Orders today", String(metrics?.total_orders ?? 0), `${metrics?.active_orders ?? 0} active orders`],
-          ["Conversion", `${Math.round((metrics?.conversion_rate ?? 0) * 100)}%`, "From call logs + orders"],
-          ["Revenue", money(metrics?.revenue ?? 0), "From confirmed orders"],
+          ["Calls", String(metrics?.total_calls ?? 0), `${metrics?.missed_calls ?? 0} missed calls`],
+          ["Placed orders", String(metrics?.total_orders ?? 0), `${metrics?.active_orders ?? 0} active now`],
+          ["Avg order value", money(metrics?.avg_order_value ?? 0), `${Math.round((metrics?.conversion_rate ?? 0) * 100)}% conversion`],
+          ["Revenue", money(metrics?.revenue ?? 0), `From ${metrics?.revenue_order_count ?? 0} placed orders`],
         ].map(([label, value, delta]) => (
           <div key={label} className="border border-border bg-bg p-5"><p className="text-sm text-text-2">{label}</p><p className="mt-2 font-mono text-3xl">{value}</p><p className="mt-3 text-sm text-accent">{delta}</p></div>
         ))}

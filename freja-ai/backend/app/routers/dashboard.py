@@ -15,6 +15,8 @@ from app.models.order import Order
 from app.services.restaurant_seed import ensure_demo_restaurant
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
+REVENUE_STATUSES = {"confirmed", "preparing", "ready", "completed", "delivered"}
+ACTIVE_STATUSES = {"pending", "confirmed", "preparing", "ready"}
 
 
 class DashboardStatusUpdate(BaseModel):
@@ -175,6 +177,21 @@ def _top_items(orders: list[Order]) -> list[dict[str, Any]]:
     ]
 
 
+def _revenue_orders(orders: list[Order]) -> list[Order]:
+    return [order for order in orders if order.status in REVENUE_STATUSES]
+
+
+def _sum_order_revenue(orders: list[Order]) -> int:
+    return sum(max(order.total_amount, 0) for order in _revenue_orders(orders))
+
+
+def _average_order_value(orders: list[Order]) -> int:
+    revenue_orders = _revenue_orders(orders)
+    if not revenue_orders:
+        return 0
+    return round(sum(max(order.total_amount, 0) for order in revenue_orders) / len(revenue_orders))
+
+
 @router.get("/overview")
 async def overview(session: AsyncSession = Depends(get_session)) -> dict[str, Any]:
     restaurant_id = await _restaurant_id(session)
@@ -182,17 +199,18 @@ async def overview(session: AsyncSession = Depends(get_session)) -> dict[str, An
     calls = await _calls(session, restaurant_id)
 
     total_calls = len(calls)
-    total_orders = len(orders)
-    revenue = sum(order.total_amount for order in orders)
+    revenue_orders = _revenue_orders(orders)
+    total_orders = len(revenue_orders)
+    revenue = _sum_order_revenue(orders)
     missed = len([call for call in calls if call.outcome == "missed"])
-    active_orders = [order for order in orders if order.status in {"pending", "confirmed", "preparing", "ready"}]
+    active_orders = [order for order in orders if order.status in ACTIVE_STATUSES]
 
     per_hour: dict[str, dict[str, int]] = {}
     for call in calls:
         label = _hour_label(call.created_at)
         per_hour.setdefault(label, {"hour": label, "calls": 0, "orders": 0})
         per_hour[label]["calls"] += 1
-    for order in orders:
+    for order in revenue_orders:
         label = _hour_label(order.created_at)
         per_hour.setdefault(label, {"hour": label, "calls": 0, "orders": 0})
         per_hour[label]["orders"] += 1
@@ -203,6 +221,8 @@ async def overview(session: AsyncSession = Depends(get_session)) -> dict[str, An
             "total_orders": total_orders,
             "conversion_rate": round(total_orders / total_calls, 2) if total_calls else 0,
             "revenue": revenue,
+            "revenue_order_count": len(revenue_orders),
+            "avg_order_value": _average_order_value(orders),
             "missed_calls": missed,
             "active_orders": len(active_orders),
         },
@@ -314,15 +334,16 @@ async def dashboard_analytics(session: AsyncSession = Depends(get_session)) -> d
     restaurant_id = await _restaurant_id(session)
     orders = await _orders(session, restaurant_id)
     calls = await _calls(session, restaurant_id)
-    top_items = _top_items(orders)
+    revenue_orders = _revenue_orders(orders)
+    top_items = _top_items(revenue_orders)
 
     language_counts = Counter(call.detected_language or "unknown" for call in calls if call.outcome == "ordered")
-    order_type_counts = Counter(order.order_type for order in orders)
+    order_type_counts = Counter(order.order_type for order in revenue_orders)
     hourly_calls = Counter(_hour_label(call.created_at) for call in calls)
     confidence_values = [call.ai_confidence_avg for call in calls if call.ai_confidence_avg is not None]
     modified_orders = [
         order
-        for order in orders
+        for order in revenue_orders
         if any(isinstance(item.get("modifiers"), dict) and any(item["modifiers"].values()) for item in order.items)
     ]
 
@@ -330,7 +351,7 @@ async def dashboard_analytics(session: AsyncSession = Depends(get_session)) -> d
         "kpis": {
             "most_ordered": f"{top_items[0]['item']} ({top_items[0]['orders']} orders)" if top_items else "No orders yet",
             "busiest_hour": hourly_calls.most_common(1)[0][0] if hourly_calls else "n/a",
-            "avg_order_value": round(sum(order.total_amount for order in orders) / len(orders)) if orders else 0,
+            "avg_order_value": _average_order_value(orders),
             "missed_call_recovery": round((1 - (len([call for call in calls if call.outcome == "missed"]) / len(calls))) * 100) if calls else 0,
         },
         "languages": [{"name": language.upper(), "value": count} for language, count in language_counts.most_common()],
@@ -339,6 +360,6 @@ async def dashboard_analytics(session: AsyncSession = Depends(get_session)) -> d
         "ai_performance": {
             "avg_confidence": round((sum(confidence_values) / len(confidence_values)) * 100, 1) if confidence_values else 0,
             "handoffs": len([call for call in calls if call.outcome == "handoff"]),
-            "orders_with_modifications": round((len(modified_orders) / len(orders)) * 100) if orders else 0,
+            "orders_with_modifications": round((len(modified_orders) / len(revenue_orders)) * 100) if revenue_orders else 0,
         },
     }
