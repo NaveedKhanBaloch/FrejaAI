@@ -404,11 +404,31 @@ class ElevenLabsAgentService:
             return item, 1, {}
         if not isinstance(item, dict):
             raise MenuValidationError("Invalid order item")
-        name = str(item.get("name") or item.get("id") or "")
+        nested_item = item.get("item") if isinstance(item.get("item"), dict) else {}
+        name = str(
+            item.get("name")
+            or nested_item.get("name")
+            or item.get("item_name")
+            or item.get("itemName")
+            or item.get("id")
+            or ""
+        )
         quantity = int(item.get("quantity") or 1)
         modifiers = dict(item.get("modifiers") or {})
-        if item.get("size"):
-            modifiers["size"] = str(item["size"]).lower()
+        if isinstance(nested_item.get("modifiers"), dict):
+            modifiers = {**nested_item["modifiers"], **modifiers}
+        size = (
+            item.get("size")
+            or item.get("selected_size")
+            or item.get("selectedSize")
+            or item.get("item_size")
+            or item.get("itemSize")
+            or nested_item.get("size")
+            or nested_item.get("selected_size")
+            or nested_item.get("selectedSize")
+        )
+        if size:
+            modifiers["size"] = str(size).lower()
         toppings = item.get("toppings")
         if isinstance(toppings, list):
             modifiers["add_toppings"] = [str(topping).lower() for topping in toppings]

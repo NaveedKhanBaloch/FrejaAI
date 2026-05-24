@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import { Features } from "@/components/sections/Features";
 import { FinalCTA } from "@/components/sections/FinalCTA";
 import { Hero } from "@/components/sections/Hero";
@@ -9,23 +12,27 @@ import { Testimonials } from "@/components/sections/Testimonials";
 import { VoiceBotDemo } from "@/components/sections/VoiceBotDemo";
 import { Footer } from "@/components/layout/Footer";
 import { Navbar } from "@/components/layout/Navbar";
+import { landingCopy, type LandingLanguage } from "@/lib/landing-copy";
 
 export default function Home() {
+  const [language, setLanguage] = useState<LandingLanguage>("sv");
+  const copy = landingCopy[language];
+
   return (
     <>
-      <Navbar />
+      <Navbar copy={copy.nav} language={language} onLanguageChange={setLanguage} />
       <main>
-        <Hero />
-        <PainPoints />
-        <HowItWorks />
-        <Features />
-        <PlatformComparison />
-        <VoiceBotDemo />
-        <Testimonials />
-        <Pricing />
-        <FinalCTA />
+        <Hero copy={copy.hero} phoneCopy={copy.phone} />
+        <PainPoints copy={copy.pain} />
+        <HowItWorks copy={copy.how} />
+        <Features copy={copy.features} />
+        <PlatformComparison copy={copy.comparison} />
+        <VoiceBotDemo copy={copy.demo} />
+        <Testimonials copy={copy.testimonials} />
+        <Pricing copy={copy.pricing} />
+        <FinalCTA copy={copy.cta} />
       </main>
-      <Footer />
+      <Footer copy={copy.footer} />
     </>
   );
 }

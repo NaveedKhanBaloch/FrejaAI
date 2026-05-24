@@ -3,6 +3,7 @@
 import { useConversation } from "@elevenlabs/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import type { LandingCopy } from "@/lib/landing-copy";
 import { useVoiceStore, type DemoOrderTicket } from "@/lib/voice-simulator";
 
 const ELEVENLABS_AGENT_ID = "agent_4201krxdkbgvf8vamjt6gkwbe5fe";
@@ -34,13 +35,13 @@ function isLocalBrowserOrigin() {
   return ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
 }
 
-export function VoiceSimulator() {
+export function VoiceSimulator({ copy }: { copy: LandingCopy["demo"] }) {
   const { lines, reset, addLine, completeOrder, markCallStarted } = useVoiceStore();
   const ticketReady = useVoiceStore((state) => state.ticketReady);
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
-  const [statusMessage, setStatusMessage] = useState("Ready");
+  const [statusMessage, setStatusMessage] = useState<string>(copy.ready);
   const transcriptRef = useRef<HTMLDivElement | null>(null);
   const connectTimerRef = useRef<number | null>(null);
   const clientOrderIdRef = useRef<string | null>(null);
@@ -102,7 +103,7 @@ export function VoiceSimulator() {
       }
       setConversationId(id);
       setConnecting(false);
-      setStatusMessage("Connected. Freja is listening.");
+      setStatusMessage(copy.connected);
     },
     onDisconnect: () => {
       if (connectTimerRef.current !== null) {
@@ -111,7 +112,7 @@ export function VoiceSimulator() {
       }
       setConversationId(null);
       setConnecting(false);
-      setStatusMessage("Disconnected");
+      setStatusMessage(copy.disconnected);
     },
     onError: (message) => {
       if (connectTimerRef.current !== null) {
@@ -120,7 +121,7 @@ export function VoiceSimulator() {
       }
       setError(typeof message === "string" ? message : "ElevenLabs voice agent failed.");
       setConnecting(false);
-      setStatusMessage("Connection failed");
+      setStatusMessage(copy.failed);
     },
     onMessage: ({ message, role }) => {
       const text = message.trim();
@@ -147,7 +148,7 @@ export function VoiceSimulator() {
     setError(null);
     setConnecting(true);
     setConversationId(null);
-    setStatusMessage("Starting ElevenLabs session...");
+    setStatusMessage(copy.starting);
     reset();
     markCallStarted();
     try {
@@ -168,14 +169,14 @@ export function VoiceSimulator() {
         if (conversation.status !== "connected") {
           setConnecting(false);
           setError("ElevenLabs did not connect within 15 seconds. Check that the agent is public/authentication disabled and localhost is allowed.");
-          setStatusMessage("Connection timed out");
+          setStatusMessage(copy.timedOut);
           conversation.endSession();
         }
       }, 15000);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Voice session failed.");
       setConnecting(false);
-      setStatusMessage("Connection failed");
+      setStatusMessage(copy.failed);
       conversation.endSession();
     }
   }
@@ -187,7 +188,7 @@ export function VoiceSimulator() {
     }
     conversation.endSession();
     setConnecting(false);
-    setStatusMessage("Disconnected");
+    setStatusMessage(copy.disconnected);
   }
 
   const connected = conversation.status === "connected";
@@ -197,10 +198,10 @@ export function VoiceSimulator() {
     if (!ticketReady || conversation.status !== "connected") return;
     const timer = window.setTimeout(() => {
       conversation.endSession();
-      setStatusMessage("Order confirmed. Call ended.");
+      setStatusMessage(copy.confirmedEnded);
     }, 3500);
     return () => window.clearTimeout(timer);
-  }, [conversation, ticketReady]);
+  }, [conversation, copy.confirmedEnded, ticketReady]);
 
   return (
     <div className="mx-auto w-full max-w-[375px] border border-border bg-surface p-4">
@@ -208,7 +209,7 @@ export function VoiceSimulator() {
         <div className="h-full bg-accent transition-all" style={{ width: connected ? "72%" : lines.length > 0 ? "100%" : "0%" }} />
       </div>
       <div className="flex items-center justify-between border-b border-border pb-3">
-        <span className="font-mono text-xs text-text-2">ElevenLabs agent: Pizza Palazzo</span>
+        <span className="font-mono text-xs text-text-2">{copy.agent}</span>
         <span className={`h-2 w-2 rounded-full ${connected ? "bg-accent pulse-dot" : "bg-text-3"}`} />
       </div>
       <div className="mt-3 flex items-center justify-between font-mono text-[11px] uppercase text-text-3">
@@ -222,10 +223,10 @@ export function VoiceSimulator() {
         {lines.length === 0 && (
           <div className="mt-12 text-center">
             <p className="mb-5 text-sm leading-6 text-text-2">
-              This uses ElevenLabs for the live voice call while Freja displays the transcript and sends confirmed orders into the kitchen display.
+              {copy.description}
             </p>
             <button className="w-full bg-accent px-4 py-4 font-bold text-bg disabled:opacity-60" onClick={startCall} disabled={connecting || connected}>
-              {connecting ? "Connecting..." : "Tap to place a call"}
+              {connecting ? copy.connecting : copy.start}
             </button>
           </div>
         )}
@@ -240,16 +241,16 @@ export function VoiceSimulator() {
       <div className="mt-4 grid gap-2">
         {connected || connecting ? (
           <button onClick={stopCall} className="border border-danger px-3 py-3 text-sm text-danger">
-            End call
+            {copy.end}
           </button>
         ) : (
           lines.length > 0 && (
             <button onClick={startCall} className="border border-accent px-3 py-3 text-sm text-accent">
-              Start a new ElevenLabs call
+              {copy.restart}
             </button>
           )
         )}
-        {conversationId && <p className="truncate font-mono text-[11px] text-text-3">Conversation {conversationId}</p>}
+        {conversationId && <p className="truncate font-mono text-[11px] text-text-3">{copy.conversation} {conversationId}</p>}
       </div>
     </div>
   );

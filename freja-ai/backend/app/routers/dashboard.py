@@ -102,6 +102,7 @@ async def _calls(session: AsyncSession, restaurant_id: UUID) -> list[CallLog]:
 
 
 def _serialize_order(order: Order) -> dict[str, Any]:
+    total_amount = _order_total_amount(order)
     return {
         "id": str(order.id),
         "display_id": f"#{str(order.id)[:4].upper()}",
@@ -109,8 +110,8 @@ def _serialize_order(order: Order) -> dict[str, Any]:
         "items": order.items,
         "items_label": _item_label(order.items),
         "type": order.order_type.upper(),
-        "total_amount": order.total_amount,
-        "total": f"kr {order.total_amount // 100}" if order.total_amount % 100 == 0 else f"kr {order.total_amount / 100:.2f}",
+        "total_amount": total_amount,
+        "total": _format_kr(total_amount),
         "status": order.status.upper(),
         "customer_name": order.customer_name or "Not provided",
         "customer_phone": _mask_phone(order.customer_phone),
@@ -177,19 +178,28 @@ def _top_items(orders: list[Order]) -> list[dict[str, Any]]:
     ]
 
 
+def _order_total_amount(order: Order) -> int:
+    item_total = sum(
+        int(item.get("total_price") or 0)
+        for item in (order.items or [])
+        if isinstance(item, dict)
+    )
+    return item_total if item_total > 0 else max(order.total_amount, 0)
+
+
 def _revenue_orders(orders: list[Order]) -> list[Order]:
     return [order for order in orders if order.status in REVENUE_STATUSES]
 
 
 def _sum_order_revenue(orders: list[Order]) -> int:
-    return sum(max(order.total_amount, 0) for order in _revenue_orders(orders))
+    return sum(_order_total_amount(order) for order in _revenue_orders(orders))
 
 
 def _average_order_value(orders: list[Order]) -> int:
     revenue_orders = _revenue_orders(orders)
     if not revenue_orders:
         return 0
-    return round(sum(max(order.total_amount, 0) for order in revenue_orders) / len(revenue_orders))
+    return round(sum(_order_total_amount(order) for order in revenue_orders) / len(revenue_orders))
 
 
 @router.get("/overview")

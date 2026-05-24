@@ -58,6 +58,21 @@ def test_order_idempotency_prefers_explicit_call_key() -> None:
     assert service._order_idempotency_key({"conversation_id": "conv-42"}) == "elevenlabs-conv-42"
 
 
+def test_extract_item_preserves_selected_size_from_tool_payload() -> None:
+    service = ElevenLabsAgentService()
+
+    name, quantity, modifiers = service._extract_item(
+        {
+            "item": {"name": "Pepperoni Pizza", "selected_size": "large"},
+            "quantity": 2,
+        }
+    )
+
+    assert name == "Pepperoni Pizza"
+    assert quantity == 2
+    assert modifiers["size"] == "large"
+
+
 @pytest.mark.asyncio
 async def test_validate_item_uses_requested_size_price(monkeypatch: pytest.MonkeyPatch) -> None:
     service = ElevenLabsAgentService()
